@@ -31,8 +31,10 @@ def r_loss(y, mu, z, pi, tau):
 B = 1000  # Num of simulations
 
 # Load AIDS data
-basedir = str(Path(os.getcwd()).parents[2])
+#basedir = str(Path(os.getcwd()).parents[2])
+basedir = "/home/onyxia/work/EstITE/Simulations"
 AIDS = pd.read_csv(basedir + "/ACTG/Data/ACTGData.csv")
+#AIDS = "/home/onyxia/work/EstITE/Simulations/ACTG/Data/ACTGData.csv"
 
 # Define treatment assignment
 myZ = np.array(AIDS["treat"])
@@ -96,8 +98,11 @@ for i in range(B):
     CATT_Test = ITE_test[z_test == 1]; CATC_Test = ITE_test[z_test == 0]
 
     # 1) CMGP
+    print("CMGP")
     myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
+    print("before fit")
     myCMGP.fit(X=x_train, Y=y_train, W=z_train)
+    print("after fit")
 
     train_CMGP_est = myCMGP.predict(x_train)[0]
     test_CMGP_est = myCMGP.predict(x_test)[0]
