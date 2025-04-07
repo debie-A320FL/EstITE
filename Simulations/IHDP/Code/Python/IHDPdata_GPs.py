@@ -28,11 +28,20 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 1000  # Num of simulations
+B = 10  # Num of simulations
 
 # Load IHDP data
-basedir = str(Path(os.getcwd()).parents[2])
-IHDP = pd.read_csv(basedir + "/IHDP/Data/IHDPData.csv")
+#basedir = str(Path(os.getcwd()).parents[2])
+#IHDP = pd.read_csv(basedir + "/IHDP/Data/IHDPData.csv")
+
+basedir = "/home/onyxia/work/EstITE/Simulations"
+IHDP = pd.read_csv(basedir + "/IHDP/Data/IHDPdata.csv")
+
+# To save result
+# Define the full path
+results_dir = os.path.join(basedir, "IHDP", "Results")
+# Create the directory if it doesn't exist
+os.makedirs(results_dir, exist_ok=True)
 
 # Define treatment assignment
 myZ = np.array(IHDP["treat"])
@@ -48,7 +57,7 @@ N, P = IHDP.drop(columns=["treat"]).shape
 myX = np.array(IHDP.drop(columns=["treat"]))
 
 # Results storage
-esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE', 'RLOSS']
+esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE']
 
 Results = {}
 for i in range(2):

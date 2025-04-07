@@ -13,6 +13,11 @@ library(grf)
 library(rlearner)
 library(causalToolbox)
 library(future)
+
+# Other needed packages 
+library(nnet)
+library(forestry)
+
 availableCores() # 8 processes in total
 plan(multisession)  # use future() to assign and value() function to block subsequent evaluations
 
