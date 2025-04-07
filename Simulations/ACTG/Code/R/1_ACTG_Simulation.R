@@ -10,8 +10,8 @@ library(tidyverse)
 library(SparseBCF) # BCF package: install from https://github.com/albicaron/SparseBCF 
 library(BART) # Main package including all the version of BART
 library(grf)
-library(rlearner)
-library(causalToolbox)
+library(rlearner) # from https://github.com/xnie/rlearner
+library(causalToolbox) # from https://github.com/soerenkuenzel/causalToolbox
 library(future)
 
 # Other needed packages 
@@ -31,7 +31,7 @@ MC_se <- function(x, B) qt(0.975, B-1)*sd(x)/sqrt(B)
 r_loss <- function(y, mu, z, pi, tau) mean(( (y - mu) - (z - pi)*tau )^2)
 
 ### OPTIONS
-B = 1000   # Num of Simulations
+B = 10   # Num of Simulations
 
 
 # Load Data
@@ -72,16 +72,22 @@ PS_est = PS_nn$fitted.values
 
 
 # Store simulations true and estimated quantities for CATT and CATC separately
-MLearners = c('S-RF', 'S-BART', 'T-RF', 'T-BART', 'X-RF', 'X-BART',
+# MLearners = c('S-RF', 'S-BART', 'T-RF', 'T-BART', 'X-RF', 'X-BART',
+#               'R-LASSO', 'R-BOOST', 'CF', 'BCF')
+
+# MLearner without RF one (which do not run)
+MLearners = c('S-BART','T-BART','X-BART',
               'R-LASSO', 'R-BOOST', 'CF', 'BCF')
 
+nb_learner = length((MLearners))
+
 mylist = list(
-  CATT_Train_Bias = matrix(NA, B, 10),  CATT_Test_Bias = matrix(NA, B, 10),
-  CATT_Train_PEHE = matrix(NA, B, 10),  CATT_Test_PEHE = matrix(NA, B, 10),
-  CATT_Train_RLOSS = matrix(NA, B, 10), CATT_Test_RLOSS = matrix(NA, B, 10),
-  CATC_Train_Bias = matrix(NA, B, 10),  CATC_Test_Bias = matrix(NA, B, 10),
-  CATC_Train_PEHE = matrix(NA, B, 10),  CATC_Test_PEHE = matrix(NA, B, 10),
-  CATC_Train_RLOSS = matrix(NA, B, 10), CATC_Test_RLOSS = matrix(NA, B, 10)
+  CATT_Train_Bias = matrix(NA, B, nb_learner),  CATT_Test_Bias = matrix(NA, B, nb_learner),
+  CATT_Train_PEHE = matrix(NA, B, nb_learner),  CATT_Test_PEHE = matrix(NA, B, nb_learner),
+  CATT_Train_RLOSS = matrix(NA, B, nb_learner), CATT_Test_RLOSS = matrix(NA, B, nb_learner),
+  CATC_Train_Bias = matrix(NA, B, nb_learner),  CATC_Test_Bias = matrix(NA, B, nb_learner),
+  CATC_Train_PEHE = matrix(NA, B, nb_learner),  CATC_Test_PEHE = matrix(NA, B, nb_learner),
+  CATC_Train_RLOSS = matrix(NA, B, nb_learner), CATC_Test_RLOSS = matrix(NA, B, nb_learner)
 )
 
 Results <- map(mylist, `colnames<-`, MLearners)
@@ -157,34 +163,38 @@ system.time(
     ###### MODELS ESTIMATION  ------------------------------------------------
     
     
-    ################ S-RF
-    SRF <- S_RF(train_augmX, z_train, y_train)
-    train_est = EstimateCate(SRF, train_augmX)
-    test_est = EstimateCate(SRF, test_augmX)
+    # ################ S-RF # Code does not run atm
     
-    # CATT
-    Results$CATT_Train_Bias[i, 'S-RF'] = bias(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_PEHE[i, 'S-RF'] = PEHE(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_RLOSS[i, 'S-RF'] = r_loss(y_train[z_train == 1], mu_est[smp_split == 1][z_train == 1], 
-                                                 z_train[z_train == 1], PS_est[smp_split == 1][z_train == 1], train_est[z_train == 1])
+    # Error : Error: 'forestry' is not an exported object 
+    #                 from 'namespace:forestry'
     
-    Results$CATT_Test_Bias[i, 'S-RF'] = bias(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_PEHE[i, 'S-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_RLOSS[i, 'S-RF'] = r_loss(y_test[z_test == 1], mu_est[smp_split == 2][z_test == 1], 
-                                                z_test[z_test == 1], PS_est[smp_split == 2][z_test == 1], test_est[z_test == 1])
-    
-    # CATC
-    Results$CATC_Train_Bias[i, 'S-RF'] = bias(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_PEHE[i, 'S-RF'] = PEHE(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_RLOSS[i, 'S-RF'] = r_loss(y_train[z_train == 0], mu_est[smp_split == 1][z_train == 0], 
-                                                 z_train[z_train == 0], PS_est[smp_split == 1][z_train == 0], train_est[z_train == 0])
-    
-    Results$CATC_Test_Bias[i, 'S-RF'] = bias(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_PEHE[i, 'S-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_RLOSS[i, 'S-RF'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
-                                                z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
-    
-    rm(SRF)
+    # SRF <- S_RF(train_augmX, z_train, y_train)
+    # train_est = EstimateCate(SRF, train_augmX)
+    # test_est = EstimateCate(SRF, test_augmX)
+    # 
+    # # CATT
+    # Results$CATT_Train_Bias[i, 'S-RF'] = bias(Train_CATT, train_est[z_train == 1])
+    # Results$CATT_Train_PEHE[i, 'S-RF'] = PEHE(Train_CATT, train_est[z_train == 1])
+    # Results$CATT_Train_RLOSS[i, 'S-RF'] = r_loss(y_train[z_train == 1], mu_est[smp_split == 1][z_train == 1], 
+    #                                              z_train[z_train == 1], PS_est[smp_split == 1][z_train == 1], train_est[z_train == 1])
+    # 
+    # Results$CATT_Test_Bias[i, 'S-RF'] = bias(Test_CATT, test_est[z_test == 1])
+    # Results$CATT_Test_PEHE[i, 'S-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
+    # Results$CATT_Test_RLOSS[i, 'S-RF'] = r_loss(y_test[z_test == 1], mu_est[smp_split == 2][z_test == 1], 
+    #                                             z_test[z_test == 1], PS_est[smp_split == 2][z_test == 1], test_est[z_test == 1])
+    # 
+    # # CATC
+    # Results$CATC_Train_Bias[i, 'S-RF'] = bias(Train_CATC, train_est[z_train == 0])
+    # Results$CATC_Train_PEHE[i, 'S-RF'] = PEHE(Train_CATC, train_est[z_train == 0])
+    # Results$CATC_Train_RLOSS[i, 'S-RF'] = r_loss(y_train[z_train == 0], mu_est[smp_split == 1][z_train == 0], 
+    #                                              z_train[z_train == 0], PS_est[smp_split == 1][z_train == 0], train_est[z_train == 0])
+    # 
+    # Results$CATC_Test_Bias[i, 'S-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    # Results$CATC_Test_PEHE[i, 'S-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    # Results$CATC_Test_RLOSS[i, 'S-RF'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
+    #                                             z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
+    # 
+    # rm(SRF)
     
     
     
@@ -265,34 +275,34 @@ system.time(
     
     
     
-    #################### T-RF    
-    TRF <- T_RF(train_augmX, z_train, y_train)
-    train_est = EstimateCate(TRF, train_augmX)
-    test_est = EstimateCate(TRF, test_augmX)
-    
-    # CATT
-    Results$CATT_Train_Bias[i, 'T-RF'] = bias(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_PEHE[i, 'T-RF'] = PEHE(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_RLOSS[i, 'T-RF'] = r_loss(y_train[z_train == 1], mu_est[smp_split == 1][z_train == 1], 
-                                                 z_train[z_train == 1], PS_est[smp_split == 1][z_train == 1], train_est[z_train == 1])
-    
-    Results$CATT_Test_Bias[i, 'T-RF'] = bias(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_PEHE[i, 'T-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_RLOSS[i, 'T-RF'] = r_loss(y_test[z_test == 1], mu_est[smp_split == 2][z_test == 1], 
-                                                z_test[z_test == 1], PS_est[smp_split == 2][z_test == 1], test_est[z_test == 1])
-    
-    # CATC
-    Results$CATC_Train_Bias[i, 'T-RF'] = bias(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_PEHE[i, 'T-RF'] = PEHE(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_RLOSS[i, 'T-RF'] = r_loss(y_train[z_train == 0], mu_est[smp_split == 1][z_train == 0], 
-                                                 z_train[z_train == 0], PS_est[smp_split == 1][z_train == 0], train_est[z_train == 0])
-    
-    Results$CATC_Test_Bias[i, 'T-RF'] = bias(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_PEHE[i, 'T-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_RLOSS[i, 'T-RF'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
-                                                z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
-    
-    rm(TRF)
+    # #################### T-RF # Does not run atm
+    # TRF <- T_RF(train_augmX, z_train, y_train)
+    # train_est = EstimateCate(TRF, train_augmX)
+    # test_est = EstimateCate(TRF, test_augmX)
+    # 
+    # # CATT
+    # Results$CATT_Train_Bias[i, 'T-RF'] = bias(Train_CATT, train_est[z_train == 1])
+    # Results$CATT_Train_PEHE[i, 'T-RF'] = PEHE(Train_CATT, train_est[z_train == 1])
+    # Results$CATT_Train_RLOSS[i, 'T-RF'] = r_loss(y_train[z_train == 1], mu_est[smp_split == 1][z_train == 1], 
+    #                                              z_train[z_train == 1], PS_est[smp_split == 1][z_train == 1], train_est[z_train == 1])
+    # 
+    # Results$CATT_Test_Bias[i, 'T-RF'] = bias(Test_CATT, test_est[z_test == 1])
+    # Results$CATT_Test_PEHE[i, 'T-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
+    # Results$CATT_Test_RLOSS[i, 'T-RF'] = r_loss(y_test[z_test == 1], mu_est[smp_split == 2][z_test == 1], 
+    #                                             z_test[z_test == 1], PS_est[smp_split == 2][z_test == 1], test_est[z_test == 1])
+    # 
+    # # CATC
+    # Results$CATC_Train_Bias[i, 'T-RF'] = bias(Train_CATC, train_est[z_train == 0])
+    # Results$CATC_Train_PEHE[i, 'T-RF'] = PEHE(Train_CATC, train_est[z_train == 0])
+    # Results$CATC_Train_RLOSS[i, 'T-RF'] = r_loss(y_train[z_train == 0], mu_est[smp_split == 1][z_train == 0], 
+    #                                              z_train[z_train == 0], PS_est[smp_split == 1][z_train == 0], train_est[z_train == 0])
+    # 
+    # Results$CATC_Test_Bias[i, 'T-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    # Results$CATC_Test_PEHE[i, 'T-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    # Results$CATC_Test_RLOSS[i, 'T-RF'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
+    #                                             z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
+    # 
+    # rm(TRF)
     
     
     
@@ -411,35 +421,35 @@ system.time(
     
     
     
-    #################### X-RF
-    # Remove propensity score
-    XRF <- X_RF(train_augmX[,-ncol(train_augmX)], z_train, y_train)
-    train_est = EstimateCate(XRF, train_augmX[,-ncol(train_augmX)])
-    test_est = EstimateCate(XRF, test_augmX[,-ncol(test_augmX)])
-    
-    # CATT
-    Results$CATT_Train_Bias[i, 'X-RF'] = bias(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_PEHE[i, 'X-RF'] = PEHE(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_RLOSS[i, 'X-RF'] = r_loss(y_train[z_train == 1], mu_est[smp_split == 1][z_train == 1], 
-                                                 z_train[z_train == 1], PS_est[smp_split == 1][z_train == 1], train_est[z_train == 1])
-    
-    Results$CATT_Test_Bias[i, 'X-RF'] = bias(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_PEHE[i, 'X-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_RLOSS[i, 'X-RF'] = r_loss(y_test[z_test == 1], mu_est[smp_split == 2][z_test == 1], 
-                                                z_test[z_test == 1], PS_est[smp_split == 2][z_test == 1], test_est[z_test == 1])
-    
-    # CATC
-    Results$CATC_Train_Bias[i, 'X-RF'] = bias(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_PEHE[i, 'X-RF'] = PEHE(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_RLOSS[i, 'X-RF'] = r_loss(y_train[z_train == 0], mu_est[smp_split == 1][z_train == 0], 
-                                                 z_train[z_train == 0], PS_est[smp_split == 1][z_train == 0], train_est[z_train == 0])
-    
-    Results$CATC_Test_Bias[i, 'X-RF'] = bias(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_PEHE[i, 'X-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_RLOSS[i, 'X-RF'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
-                                                z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
-    
-    rm(XRF)
+    # #################### X-RF
+    # # Remove propensity score
+    # XRF <- X_RF(train_augmX[,-ncol(train_augmX)], z_train, y_train)
+    # train_est = EstimateCate(XRF, train_augmX[,-ncol(train_augmX)])
+    # test_est = EstimateCate(XRF, test_augmX[,-ncol(test_augmX)])
+    # 
+    # # CATT
+    # Results$CATT_Train_Bias[i, 'X-RF'] = bias(Train_CATT, train_est[z_train == 1])
+    # Results$CATT_Train_PEHE[i, 'X-RF'] = PEHE(Train_CATT, train_est[z_train == 1])
+    # Results$CATT_Train_RLOSS[i, 'X-RF'] = r_loss(y_train[z_train == 1], mu_est[smp_split == 1][z_train == 1], 
+    #                                              z_train[z_train == 1], PS_est[smp_split == 1][z_train == 1], train_est[z_train == 1])
+    # 
+    # Results$CATT_Test_Bias[i, 'X-RF'] = bias(Test_CATT, test_est[z_test == 1])
+    # Results$CATT_Test_PEHE[i, 'X-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
+    # Results$CATT_Test_RLOSS[i, 'X-RF'] = r_loss(y_test[z_test == 1], mu_est[smp_split == 2][z_test == 1], 
+    #                                             z_test[z_test == 1], PS_est[smp_split == 2][z_test == 1], test_est[z_test == 1])
+    # 
+    # # CATC
+    # Results$CATC_Train_Bias[i, 'X-RF'] = bias(Train_CATC, train_est[z_train == 0])
+    # Results$CATC_Train_PEHE[i, 'X-RF'] = PEHE(Train_CATC, train_est[z_train == 0])
+    # Results$CATC_Train_RLOSS[i, 'X-RF'] = r_loss(y_train[z_train == 0], mu_est[smp_split == 1][z_train == 0], 
+    #                                              z_train[z_train == 0], PS_est[smp_split == 1][z_train == 0], train_est[z_train == 0])
+    # 
+    # Results$CATC_Test_Bias[i, 'X-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    # Results$CATC_Test_PEHE[i, 'X-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    # Results$CATC_Test_RLOSS[i, 'X-RF'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
+    #                                             z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
+    # 
+    # rm(XRF)
     
     
     
@@ -685,6 +695,13 @@ sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, 
 
 
 # Save Results --------------------------------------------------
+
+directory_path <- "C:/Users/ObcdO/Documents/GitHub/EstITE/Simulations/ACTG/Results"
+
+if (!dir.exists(directory_path)) {
+  dir.create(directory_path, recursive = TRUE)
+}
+
 invisible(
   sapply(names(Results), 
          function(x) write.csv(Results[[x]], 
@@ -697,4 +714,4 @@ write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ),
 
 write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
           file = paste0(getwd(), "/ACTG/Results/MCSE_Summary_", B, ".csv"))
-
+# 
