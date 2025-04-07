@@ -16,7 +16,7 @@ library(future)
 
 # Other needed packages 
 library(nnet)
-library(forestry)
+# library(forestry)
 
 availableCores() # 8 processes in total
 plan(multisession)  # use future() to assign and value() function to block subsequent evaluations
@@ -714,4 +714,3 @@ write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ),
 
 write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
           file = paste0(getwd(), "/ACTG/Results/MCSE_Summary_", B, ".csv"))
-# 
