@@ -31,7 +31,7 @@ MC_se <- function(x, B) qt(0.975, B-1)*sd(x)/sqrt(B)
 r_loss <- function(y, mu, z, pi, tau) mean(( (y - mu) - (z - pi)*tau )^2)
 
 ### OPTIONS
-B = 10   # Num of Simulations
+B = 3   # Num of Simulations
 
 
 # Load Data
@@ -92,6 +92,13 @@ mylist = list(
 
 Results <- map(mylist, `colnames<-`, MLearners)
 rm(mylist)
+
+mylist = list(
+ execution_time = matrix(NA, B, nb_learner)
+)
+Liste_time <- map(mylist, `colnames<-`, MLearners)
+
+
 
 system.time(
   
@@ -201,6 +208,8 @@ system.time(
     
     ######################### S-BART
     #### Train
+    start_time <- Sys.time()
+    
     myBART <- wbart(x.train = cbind(train_augmX, z_train), y.train = y_train, 
                     x.test = cbind(test_augmX, z_test), nskip = 2000, ndpost = 4000, printevery = 6000)
     
@@ -246,6 +255,10 @@ system.time(
     
     test_est = All_Trt[, "Y1"] - All_Ctrl[, "Y0"]
     
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'S-BART'] = execution_time
+    
     
     # CATT
     Results$CATT_Train_Bias[i, 'S-BART'] = bias(Train_CATT, train_est[z_train == 1])
@@ -268,6 +281,7 @@ system.time(
     Results$CATC_Test_PEHE[i, 'S-BART'] = PEHE(Test_CATC, test_est[z_test == 0])
     Results$CATC_Test_RLOSS[i, 'S-BART'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
                                                   z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
+    
     
     # Free up space
     rm(myBART, Y0_train, Y0_test)
@@ -334,6 +348,9 @@ system.time(
     
     ######################### T-BART
     #### Train
+    
+    start_time <- Sys.time()
+    
     myBART1_shell <- future({
       wbart(x.train = new_train_X[z_train == 1, ], y.train = y_train[z_train == 1], x.test = new_test_X[z_test == 1, ],
             nskip = 2000, ndpost = 4000, printevery = 6000)
@@ -366,6 +383,10 @@ system.time(
     Y0_train[z_train == 0] <- myBART0$yhat.train.mean
     Y0_train[z_train == 1] <- colMeans(Y0_1)
     
+    # Measure time needed to execute X code (use value from T code)
+    end_time <- Sys.time()
+    execution_time_T_shared_with_X <- end_time - start_time
+    
     # Store ITE estimates
     train_est = Y1_train - Y0_train
     
@@ -391,6 +412,10 @@ system.time(
     
     # Store ITE estimates
     test_est = Y1_test - Y0_test 
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'T-BART'] = execution_time
     
     
     # CATT
@@ -455,6 +480,8 @@ system.time(
     
     ################# X-BART
     # Use T-BART estimates
+    start_time <- Sys.time()
+    
     D_1 = y_train[z_train == 1] - Y0_train[z_train == 1]
     D_0 = Y1_train[z_train == 0] - y_train[z_train == 0]
     
@@ -506,6 +533,10 @@ system.time(
     train_est = PS_est[smp_split == 1]*colMeans(tau_0_train) + (1 - PS_est[smp_split == 1])*colMeans(tau_1_train)
     test_est = PS_est[smp_split == 2]*colMeans(tau_0_test) + (1 - PS_est[smp_split == 2])*colMeans(tau_1_test)
     
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'X-BART'] = execution_time + execution_time_T_shared_with_X
+    
     
     # CATT
     Results$CATT_Train_Bias[i, 'X-BART'] = bias(Train_CATT, train_est[z_train == 1])
@@ -528,7 +559,7 @@ system.time(
     Results$CATC_Test_PEHE[i, 'X-BART'] = PEHE(Test_CATC, test_est[z_test == 0])
     Results$CATC_Test_RLOSS[i, 'X-BART'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
                                                   z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
-    
+
     rm(myBART1, myBART0, tau_0_test, tau_0_train, tau_1_test, tau_1_train)
     
     
@@ -536,11 +567,17 @@ system.time(
     
     ######################## R-Lasso Regression
     # No estimated PS as 
+    start_time <- Sys.time()
+    
     RLASSO <- rlasso(x = train_augmX[, -ncol(train_augmX)], w = z_train, y = y_train,
                      lambda_choice = "lambda.min", rs = FALSE)
     
     train_est = predict(RLASSO, train_augmX[, -ncol(train_augmX)])
     test_est = predict(RLASSO, test_augmX[, -ncol(train_augmX)])
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'R-LASSO'] = execution_time
     
     # CATT
     Results$CATT_Train_Bias[i, 'R-LASSO'] = bias(Train_CATT, train_est[z_train == 1])
@@ -564,6 +601,7 @@ system.time(
     Results$CATC_Test_RLOSS[i, 'R-LASSO'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
                                                    z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])  
     
+    
     rm(RLASSO)    
     
     
@@ -571,10 +609,16 @@ system.time(
     
     ######################## R-BOOST Regression
     # No estimated PS as 
+    start_time <- Sys.time()
+    
     RBOOST <- rboost(x = train_augmX[, -ncol(train_augmX)], w = z_train, y = y_train, nthread=1)
     
     train_est = predict(RBOOST, train_augmX[, -ncol(train_augmX)])
     test_est = predict(RBOOST, test_augmX[, -ncol(train_augmX)])
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'R-BOOST'] = execution_time
     
     # CATT
     Results$CATT_Train_Bias[i, 'R-BOOST'] = bias(Train_CATT, train_est[z_train == 1])
@@ -605,10 +649,17 @@ system.time(
     
     ######################### Causal RF (Athey, Wagner 2019)
     # Train
+    start_time <- Sys.time()
+    
     CRF <- causal_forest(train_augmX[, -ncol(train_augmX)], y_train, z_train, tune.parameters = "all")
     
     train_est = predict(CRF)[, "predictions"]
     test_est = predict(CRF, newdata =  test_augmX[, -ncol(test_augmX)])[, "predictions"]
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'CF'] = execution_time
+    
     
     # CATT
     Results$CATT_Train_Bias[i, 'CF'] = bias(Train_CATT, train_est[z_train == 1])
@@ -641,6 +692,9 @@ system.time(
     
     ######################### BCF 
     #### Train
+    
+    start_time <- Sys.time()
+    
     mybcf <- 
       SparseBCF(y = y_train, 
                 z = z_train, 
@@ -656,6 +710,10 @@ system.time(
     
     train_est = colMeans(mybcf$tau)
     test_est = colMeans(mybcf$tau_pred)
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'BCF'] = execution_time
     
     
     # CATT
@@ -679,6 +737,7 @@ system.time(
     Results$CATC_Test_PEHE[i, 'BCF'] = PEHE(Test_CATC, test_est[z_test == 0])
     Results$CATC_Test_RLOSS[i, 'BCF'] = r_loss(y_test[z_test == 0], mu_est[smp_split == 2][z_test == 0], 
                                                z_test[z_test == 0], PS_est[smp_split == 2][z_test == 0], test_est[z_test == 0])
+
     
     # Remove garbage
     rm(mybcf)
@@ -692,6 +751,9 @@ system.time(
 
 sapply( names(Results), function(x) colMeans(Results[[x]]) )
 sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) )
+
+print(Liste_time)
+sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) )
 
 
 # Save Results --------------------------------------------------
