@@ -11,10 +11,26 @@ library(tidyverse)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../..')
 
-PEHE_Train = cbind(read.csv("./ACTG/Results/ACTG_1000_CATT_Train_PEHE.csv"), 
-                   read.csv("./ACTG/Results/GP_1000_CATT_Train_PEHE.csv"))
-PEHE_Test = cbind(read.csv("./ACTG/Results/ACTG_1000_CATT_Test_PEHE.csv"), 
-                  read.csv("./ACTG/Results/GP_1000_CATT_Test_PEHE.csv"))
+
+# PEHE_Train = cbind(read.csv("./ACTG/Results/ACTG_1000_CATT_Train_PEHE.csv"), 
+#                    read.csv("./ACTG/Results/GP_1000_CATT_Train_PEHE.csv"))
+# PEHE_Test = cbind(read.csv("./ACTG/Results/ACTG_1000_CATT_Test_PEHE.csv"), 
+#                   read.csv("./ACTG/Results/GP_1000_CATT_Test_PEHE.csv"))
+
+# Define the variable
+num_ACTG <- 10
+num_GP <- 5
+
+# Construct the file paths dynamically
+file_path_train_actg <- paste0("./ACTG/Results/ACTG_", num_ACTG, "_CATT_Train_PEHE.csv")
+file_path_train_gp <- paste0("./ACTG/Results/GP_", num_GP, "_CATT_Train_PEHE.csv")
+file_path_test_actg <- paste0("./ACTG/Results/ACTG_", num_ACTG, "_CATT_Test_PEHE.csv")
+file_path_test_gp <- paste0("./ACTG/Results/GP_", num_GP, "_CATT_Test_PEHE.csv")
+
+# Read the CSV files using the constructed file paths
+PEHE_Train <- cbind(read.csv(file_path_train_actg), read.csv(file_path_train_gp))
+PEHE_Test <- cbind(read.csv(file_path_test_actg), read.csv(file_path_test_gp))
+
 
 PEHE_Train$X = NULL; PEHE_Test$X = NULL
 
@@ -23,8 +39,11 @@ PEHE_Train = reshape(data = PEHE_Train, varying = list(names(PEHE_Train)), timev
 PEHE_Test = reshape(data = PEHE_Test, varying = list(names(PEHE_Test)), timevar = "Model", 
                     times = names(PEHE_Test), direction = "long", v.names = "PEHE")
 
+# m_order = c("BCF", "NSGP", "CMGP", "CF", "R-BOOST", "R-LASSO", 
+#             "X-BART", "X-RF", "T-BART", "T-RF", "S-BART", "S-RF")
+
 m_order = c("BCF", "NSGP", "CMGP", "CF", "R-BOOST", "R-LASSO", 
-            "X-BART", "X-RF", "T-BART", "T-RF", "S-BART", "S-RF")
+            "X-BART", "T-BART", "S-BART")
 
 PEHE_Train = 
   PEHE_Train %>%
