@@ -28,11 +28,20 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 1000  # Num of simulations
+B = 10  # Num of simulations
 
 # Load AIDS data
-basedir = str(Path(os.getcwd()).parents[2])
+#basedir = str(Path(os.getcwd()).parents[2])
+#AIDS = pd.read_csv(basedir + "/ACTG_ThirdDGP/Data/ACTGData.csv")
+
+basedir = "/home/onyxia/work/EstITE/Simulations"
 AIDS = pd.read_csv(basedir + "/ACTG_ThirdDGP/Data/ACTGData.csv")
+
+# To save result
+# Define the full path
+results_dir = os.path.join(basedir, "ACTG_ThirdDGP", "Results")
+# Create the directory if it doesn't exist
+os.makedirs(results_dir, exist_ok=True)
 
 # Define treatment assignment
 myZ = np.array(AIDS["treat"])
@@ -48,7 +57,7 @@ N, P = AIDS.drop(columns=["treat"]).shape
 myX = np.array(AIDS.drop(columns=["treat"]))
 
 # Results storage
-esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE', 'RLOSS']
+esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE']
 
 Results = {}
 for i in range(2):
@@ -63,7 +72,7 @@ start = time.time()
 
 for i in range(B):
 
-    print("\n*** Iteration", i+1, "\n")
+    print("\n*** Iteration", i+1)
 
     # Set seed
     np.random.seed(100 + i)
