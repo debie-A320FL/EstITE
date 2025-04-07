@@ -28,13 +28,19 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 1000  # Num of simulations
+B = 100  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 basedir = "/home/onyxia/work/EstITE/Simulations"
 AIDS = pd.read_csv(basedir + "/ACTG/Data/ACTGData.csv")
 #AIDS = "/home/onyxia/work/EstITE/Simulations/ACTG/Data/ACTGData.csv"
+
+# To save result
+# Define the full path
+results_dir = os.path.join(basedir, "ACTG", "Results")
+# Create the directory if it doesn't exist
+os.makedirs(results_dir, exist_ok=True)
 
 # Define treatment assignment
 myZ = np.array(AIDS["treat"])
@@ -50,7 +56,8 @@ N, P = AIDS.drop(columns=["treat"]).shape
 myX = np.array(AIDS.drop(columns=["treat"]))
 
 # Results storage
-esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE', 'RLOSS']
+# esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE', 'RLOSS']
+esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE'] # RLOSS not stored atm
 
 Results = {}
 for i in range(2):
@@ -65,7 +72,7 @@ start = time.time()
 
 for i in range(B):
 
-    print("\n*** Iteration", i+1, "\n")
+    print("\n*** Iteration", i+1)
 
     # Set seed
     np.random.seed(100 + i)
@@ -98,11 +105,11 @@ for i in range(B):
     CATT_Test = ITE_test[z_test == 1]; CATC_Test = ITE_test[z_test == 0]
 
     # 1) CMGP
-    print("CMGP")
+    # print("CMGP")
     myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
-    print("before fit")
+    #print("before fit")
     myCMGP.fit(X=x_train, Y=y_train, W=z_train)
-    print("after fit")
+    #print("after fit")
 
     train_CMGP_est = myCMGP.predict(x_train)[0]
     test_CMGP_est = myCMGP.predict(x_test)[0]
@@ -145,7 +152,7 @@ for i in range(B):
 
 
 elapsed = time.time() - start
-print("\n\nElapsed time (in h) is", round(elapsed/3600, 2))
+print("\n\nElapsed time (in h) is", round(elapsed/3600, 2)) # 2h for B=100
 
 models = ['CMGP', 'NSGP']
 summary = {}
