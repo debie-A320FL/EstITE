@@ -67,10 +67,10 @@ generate_data <- function(n = 1000,
   
   # Convertir les colonnes gender, treatment et Y en facteurs
   data <- data %>%
-    mutate(gender = factor(gender, levels = c(0, 1), labels = c("Male", "Female")),
-           treatment = factor(treatment, levels = c(0, 1), labels = c("No", "Yes")),
-           Y = factor(Y, levels = c(0, 1), labels = c("No", "Yes")),
-           comorbidities = factor(comorbidities, level = c(0,1), labels = c("No", "Yes")))
+    mutate(gender = factor(gender, levels = c(0, 1), labels = c(0, 1)),
+           treatment = factor(treatment, levels = c(0, 1), labels = c(0, 1)),
+           Y = factor(Y, levels = c(0, 1), labels = c(0, 1)),
+           comorbidities = factor(comorbidities, level = c(0,1), labels = c(0, 1)))
   
   return(data)
 }
@@ -109,16 +109,16 @@ data %>% head()
 data %>% summary()
 
 # Afficher le résumé des données pour les hommes (gender == 0)
-summary_males <- data %>% filter(gender == "Male") %>% select(-gender) %>% summary()
+summary_males <- data %>% filter(gender == 0) %>% select(-gender) %>% summary()
 print(summary_males)
 
 # Afficher le résumé des données pour les femmes (gender == 0)
-summary_females <- data %>% filter(gender == "Female") %>% select(-gender) %>% summary()
+summary_females <- data %>% filter(gender == 1) %>% select(-gender) %>% summary()
 print(summary_females)
 
 data %>%
-  filter(gender == "Male") %>%
-  summarise(proportion = mean(treatment == "Yes"))
+  filter(gender == 0) %>%
+  summarise(proportion = mean(treatment == 1))
 
 export_data_to_csv(data, file_name = "simulated_data.csv",
                    directory = "Setup 1/Data",
