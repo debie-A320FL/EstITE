@@ -2,7 +2,7 @@
 library(dplyr)
 
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
-setwd(curr_dir); setwd('./../../..')
+setwd(curr_dir); setwd('./../..')
 
 
 # Fonction pour générer les données
@@ -72,6 +72,15 @@ generate_data <- function(n = 1000,
            Y = factor(Y, levels = c(0, 1), labels = c(0, 1)),
            comorbidities = factor(comorbidities, level = c(0,1), labels = c(0, 1)))
   
+  # Exporter les hyperparamètres dans un fichier CSV
+  hyperparams <- data.frame(
+    beta_0 = beta_0, beta_1 = beta_1, beta_2 = beta_2, beta_3 = beta_3, beta_4 = beta_4,
+    gamma_0 = gamma_0, gamma_1 = gamma_1, gamma_2 = gamma_2, gamma_3 = gamma_3, gamma_4 = gamma_4,
+    delta_0 = delta_0, delta_1 = delta_1, delta_2 = delta_2, delta_3 = delta_3, delta_4 = delta_4,
+    sigma_sq = sigma_sq
+  )
+  write.csv(hyperparams, "Data/hyperparams.csv", row.names = FALSE)
+  
   return(data)
 }
 
@@ -121,5 +130,5 @@ data %>%
   summarise(proportion = mean(treatment == 1))
 
 export_data_to_csv(data, file_name = "simulated_data.csv",
-                   directory = "Setup 1/Data",
+                   directory = "Data",
                    overwrite = FALSE)
