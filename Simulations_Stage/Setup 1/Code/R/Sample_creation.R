@@ -2,7 +2,7 @@
 library(dplyr)
 
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
-setwd(curr_dir); setwd('./../..')
+setwd(curr_dir); setwd('./../../Data')
 
 
 # Fonction pour générer les données
@@ -79,7 +79,7 @@ generate_data <- function(n = 1000,
     delta_0 = delta_0, delta_1 = delta_1, delta_2 = delta_2, delta_3 = delta_3, delta_4 = delta_4,
     sigma_sq = sigma_sq
   )
-  write.csv(hyperparams, "Data/hyperparams.csv", row.names = FALSE)
+  write.csv(hyperparams, "hyperparams.csv", row.names = FALSE)
   
   return(data)
 }
@@ -110,7 +110,7 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
   }
 }
 
-data <- generate_data(n = 1000)
+data <- generate_data(n = 1000000)
 
 data %>% head()
 
@@ -129,6 +129,6 @@ data %>%
   filter(gender == 0) %>%
   summarise(proportion = mean(treatment == 1))
 
-export_data_to_csv(data, file_name = "simulated_data.csv",
-                   directory = "Data",
+export_data_to_csv(data, file_name = "simulated_1M_data.csv",
+                   directory = ".",
                    overwrite = FALSE)

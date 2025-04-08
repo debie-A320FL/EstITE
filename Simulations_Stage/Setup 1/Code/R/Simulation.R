@@ -24,6 +24,9 @@ plan(multisession)  # use future() to assign and value() function to block subse
 BScore <- function(x, y) mean((x - y)^2)
 bias <- function(x, y) mean(x - y)
 PEHE <- function(x, y) sqrt(mean((x - y)^2))
+
+MSE_100 <- function(x, y) sqrt(mean((100*x - 100*y)^2))
+
 MC_se <- function(x, B) qt(0.975, B - 1) * sd(x) / sqrt(B)
 
 r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
@@ -36,7 +39,7 @@ B = 3   # Num of Simulations
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../Data')
 
-data <- read.csv("simulated_data.csv")
+data <- read.csv("simulated_1M_data.csv")
 
 # Importer les hyperparamètres
 hyperparams <- read.csv("hyperparams.csv")
@@ -51,149 +54,89 @@ mu_0 <- hyperparams$gamma_0 + hyperparams$gamma_1 * myX[, "age"] + hyperparams$g
 tau <- hyperparams$delta_0 + hyperparams$delta_1 * myX[, "age"] + hyperparams$delta_2 * myX[, "weight"] + hyperparams$delta_3 * myX[, "comorbidities"] + hyperparams$delta_4 * myX[, "gender"]
 ITE <- mu_0 + tau * myZ
 
+# Ajouter une colonne pi pour la probabilité théorique
+data$pi <- 1 / (1 + exp(-(mu_0 + tau * myZ)))
+
 # Remove unused vars
 rm(data, hyperparams)
 
-# Store simulations true and estimated quantities for CATT and CATC separately
-MLearners = c('S-BART', 'T-BART', 'X-BART',
-              'R-LASSO', 'R-BOOST', 'CF', 'BCF')
 
-nb_learner = length(MLearners)
+# Charger la bibliothèque nécessaire
+library(stats)
+ 
+# S_logit <- function(data){
+#   # Créer la formule avec les interactions spécifiques
+#   formula <- Y ~ age + weight + comorbidities + gender + treatment
+#   
+#   # Ajuster le modèle de régression logistique
+#   model <- glm(formula, data = data, family = binomial(link = "logit"))
+#   
+#   return(model)
+# }
+# 
+# res_S <- S_logit(data)
+# summary(res_S)
+# 
+# 
+# T_logit <- function(data){
+#   # Créer la formule avec les interactions spécifiques
+#   formula <- Y ~ age + weight + comorbidities + gender
+#   
+#   # Ajuster le modèle de régression logistique
+#   model0 <- glm(formula, data = data %>% filter(treatment == 0), family = binomial(link = "logit"))
+#   model1 <- glm(formula, data = data %>% filter(treatment == 1), family = binomial(link = "logit"))
+#   
+#   return(list(model0 = model0, model1 = model1))
+# }
+# 
+# res_T <- T_logit(data)
+# summary(res_T$model0)
+# summary(res_T$model1)
 
-mylist = list(
-  CATT_Train_Bias = matrix(NA, B, nb_learner),  CATT_Test_Bias = matrix(NA, B, nb_learner),
-  CATT_Train_PEHE = matrix(NA, B, nb_learner),  CATT_Test_PEHE = matrix(NA, B, nb_learner),
-  CATT_Train_RLOSS = matrix(NA, B, nb_learner), CATT_Test_RLOSS = matrix(NA, B, nb_learner),
-  CATC_Train_Bias = matrix(NA, B, nb_learner),  CATC_Test_Bias = matrix(NA, B, nb_learner),
-  CATC_Train_PEHE = matrix(NA, B, nb_learner),  CATC_Test_PEHE = matrix(NA, B, nb_learner),
-  CATC_Train_RLOSS = matrix(NA, B, nb_learner), CATC_Test_RLOSS = matrix(NA, B, nb_learner)
-)
 
-Results <- map(mylist, `colnames<-`, MLearners)
-rm(mylist)
+S_logit_int <- function(data){
+  # Créer la formule avec les interactions spécifiques
+  formula <- Y ~ age + weight + comorbidities + gender + treatment +
+    treatment:age + treatment:weight + treatment:comorbidities + treatment:gender
+  
+  # Ajuster le modèle de régression logistique
+  model <- glm(formula, data = data, family = binomial(link = "logit"))
+  
+  return(model)
+}
 
-mylist = list(
-  execution_time = matrix(NA, B, nb_learner)
-)
-Liste_time <- map(mylist, `colnames<-`, MLearners)
+res_S_int <- S_logit_int(data)
+summary(res_S_int)
 
-system.time(
-  for (i in 1:B) {
-    gc()
-    
-    cat("\n\n\n\n-------- Iteration", i, "--------\n\n\n\n")
-    
-    if (i <= 500) {
-      set.seed(502 + i * 5)
-    }
-    if (i > 500) {
-      set.seed(7502 + i * 5)
-    }
-    
-    # Train-Test Splitting
-    mysplit <- c(rep(1, ceiling(0.7 * N)),
-                 rep(2, floor(0.3 * N)))
-    
-    smp_split <- sample(mysplit, replace = FALSE)  # random permutation
-    
-    y_train <- myY[smp_split == 1]
-    y_test <- myY[smp_split == 2]
-    
-    x_train <- myX[smp_split == 1, ]
-    x_test <- myX[smp_split == 2, ]
-    
-    z_train <- myZ[smp_split == 1]
-    z_test <- myZ[smp_split == 2]
-    
-    Train_ITE <- ITE[smp_split == 1]
-    Test_ITE <- ITE[smp_split == 2]
-    
-    Train_CATT <- Train_ITE[z_train == 1]
-    Train_CATC <- Train_ITE[z_train == 0]
-    Test_CATT <- Test_ITE[z_test == 1]
-    Test_CATC <- Test_ITE[z_test == 0]
-    
-    # Augment X with treatment estimates
-    train_augmX <- cbind(x_train, z_train)
-    test_augmX <- cbind(x_test, z_test)
-    
-    ###### MODELS ESTIMATION  ------------------------------------------------
-    
-    ######################### S-BART
-    #### Train
-    start_time <- Sys.time()
-    
-    myBART <- wbart(x.train = train_augmX, y.train = y_train,
-                    x.test = test_augmX, nskip = 2000, ndpost = 4000, printevery = 6000)
-    
-    XZ0_train <- cbind(train_augmX, z_train)
-    XZ0_train[, "z_train"] <- ifelse(XZ0_train[, "z_train"] == 1, 0, 1)
-    
-    Y0_train <- predict(myBART, newdata = XZ0_train)
-    
-    All_obs <- cbind(Y1 = myBART$yhat.train.mean,
-                     train_augmX,
-                     z_train)
-    All_count <- cbind(Y0 = colMeans(Y0_train),
-                       XZ0_train)
-    
-    All_Trt <- All_obs
-    All_Trt[which(All_Trt[, "z_train"] == 0), ] <- All_count[which(All_count[, "z_train"] == 1), ]
-    
-    All_Ctrl <- All_count
-    All_Ctrl[which(All_Ctrl[, "z_train"] == 1), ] <- All_obs[which(All_obs[, "z_train"] == 0), ]
-    
-    train_est = All_Trt[, "Y1"] - All_Ctrl[, "Y0"]
-    
-    #### Test
-    XZ0_test <- cbind(test_augmX, z_test)
-    XZ0_test[, "z_test"] <- ifelse(XZ0_test[, "z_test"] == 1, 0, 1)
-    
-    Y0_test <- predict(myBART, newdata = XZ0_test)
-    
-    All_obs <- cbind(Y1 = myBART$yhat.test.mean,
-                     test_augmX,
-                     z_test)
-    All_count <- cbind(Y0 = colMeans(Y0_test),
-                       XZ0_test)
-    
-    All_Trt <- All_obs
-    All_Trt[which(All_Trt[, "z_test"] == 0), ] <- All_count[which(All_count[, "z_test"] == 1), ]
-    
-    All_Ctrl <- All_count
-    All_Ctrl[which(All_Ctrl[, "z_test"] == 1), ] <- All_obs[which(All_obs[, "z_test"] == 0), ]
-    
-    test_est = All_Trt[, "Y1"] - All_Ctrl[, "Y0"]
-    
-    end_time <- Sys.time()
-    execution_time <- end_time - start_time
-    Liste_time$execution_time[i, 'S-BART'] = execution_time
-    
-    # CATT
-    Results$CATT_Train_Bias[i, 'S-BART'] = bias(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_PEHE[i, 'S-BART'] = PEHE(Train_CATT, train_est[z_train == 1])
-    Results$CATT_Train_RLOSS[i, 'S-BART'] = r_loss(y_train[z_train == 1], mu_0[smp_split == 1][z_train == 1],
-                                                   z_train[z_train == 1], myZ[smp_split == 1][z_train == 1], train_est[z_train == 1])
-    
-    Results$CATT_Test_Bias[i, 'S-BART'] = bias(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_PEHE[i, 'S-BART'] = PEHE(Test_CATT, test_est[z_test == 1])
-    Results$CATT_Test_RLOSS[i, 'S-BART'] = r_loss(y_test[z_test == 1], mu_0[smp_split == 2][z_test == 1],
-                                                  z_test[z_test == 1], myZ[smp_split == 2][z_test == 1], test_est[z_test == 1])
-    
-    # CATC
-    Results$CATC_Train_Bias[i, 'S-BART'] = bias(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_PEHE[i, 'S-BART'] = PEHE(Train_CATC, train_est[z_train == 0])
-    Results$CATC_Train_RLOSS[i, 'S-BART'] = r_loss(y_train[z_train == 0], mu_0[smp_split == 1][z_train == 0],
-                                                   z_train[z_train == 0], myZ[smp_split == 1][z_train == 0], train_est[z_train == 0])
-    
-    Results$CATC_Test_Bias[i, 'S-BART'] = bias(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_PEHE[i, 'S-BART'] = PEHE(Test_CATC, test_est[z_test == 0])
-    Results$CATC_Test_RLOSS[i, 'S-BART'] = r_loss(y_test[z_test == 0], mu_0[smp_split == 2][z_test == 0],
-                                                  z_test[z_test == 0], myZ[smp_split == 2][z_test == 0], test_est[z_test == 0])
-    
-    # Free up space
-    rm(myBART, Y0_train, Y0_test)
-    
-    # suite du code avec les autres méthodes...
-  }
-)
+
+# Prédire les probabilités que Y soit égal à 1
+logit_model <- res_S_int
+data$prob_logit_Y_1 <- predict(logit_model, type = "response")
+
+MSE_100(data$pi,data$prob_logit_Y_1)
+
+# Création du plot de la MSE du la prédiction issu du logit
+# en fonction de la taille de l'échantillon
+
+sample_size <- round(logseq(100, nrow(data)))
+
+
+vec_MSE = c()
+#for (size in sample_size){
+for (i in 1:length(sample_size)){
+  size = sample_size[i]
+  print(i)
+  data_reduced = data[sample(nrow(data)),]
+  data_reduced = data_reduced[1:size,]
+  
+  res_S_int <- S_logit_int(data_reduced)
+  # Prédire les probabilités que Y soit égal à 1
+  logit_model <- res_S_int
+  data_reduced$prob_logit_Y_1 <- NA
+  data_reduced$prob_logit_Y_1 <- predict(logit_model, type = "response")
+  
+  MSE_value = MSE_100(data_reduced$pi,data_reduced$prob_logit_Y_1)
+  vec_MSE = c(vec_MSE, MSE_value)
+}
+
+plot(sample_size, vec_MSE, log="xy")
