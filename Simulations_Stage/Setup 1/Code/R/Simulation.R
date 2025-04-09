@@ -5,15 +5,63 @@
 rm(list = ls())
 
 ### LIBRARIES
+# Install devtools if not already installed
+if (!require("devtools")) {
+  install.packages("devtools")
+}
+
+# Install tidyverse if not already installed
+if (!require("tidyverse")) {
+  install.packages("tidyverse")
+}
+
+# Install SparseBCF from GitHub if not already installed
+if (!require("SparseBCF")) {
+  devtools::install_github("albicaron/SparseBCF")
+}
+
+# Install BART if not already installed
+if (!require("BART")) {
+  install.packages("BART")
+}
+
+# Install grf if not already installed
+if (!require("grf")) {
+  install.packages("grf")
+}
+
+# Install rlearner from GitHub if not already installed
+if (!require("rlearner")) {
+  devtools::install_github("xnie/rlearner")
+}
+
+# Install causalToolbox from GitHub if not already installed
+if (!require("causalToolbox")) {
+  devtools::install_github("soerenkuenzel/causalToolbox")
+}
+
+# Install future if not already installed
+if (!require("future")) {
+  install.packages("future")
+}
+
+# Load the libraries
 library(tidyverse)
-library(SparseBCF) # BCF package: install from https://github.com/albicaron/SparseBCF
-library(BART) # Main package including all the version of BART
+library(SparseBCF)
+library(BART)
 library(grf)
-library(rlearner) # from https://github.com/xnie/rlearner
-library(causalToolbox) # from https://github.com/soerenkuenzel/causalToolbox
+library(rlearner)
+library(causalToolbox)
 library(future)
 
+
 # Other needed packages
+
+# Install grf if not already installed
+if (!require("nnet")) {
+  install.packages("nnet")
+}
+
 library(nnet)
 # library(forestry)
 
@@ -160,7 +208,7 @@ plot(sample_size, vec_MSE, log="xy")
 # Estimation --------------------------------------------------------------
 
 ### OPTIONS
-B = 1   # Num of Simulations
+B = 80   # Num of Simulations
 N = data %>% nrow()
 
 #### PScore Estimation
@@ -848,7 +896,7 @@ if (!dir.exists(directory_path)) {
 invisible(
   sapply(names(Results), 
          function(x) write.csv(Results[[x]], 
-                               file=paste0(getwd(), "/../Results/Setup_1_", B, "_", x, ".csv") ) )
+                               file=paste0(getwd(), "/../Results/Logit_", B, "_", x, ".csv") ) )
 )
 
 
