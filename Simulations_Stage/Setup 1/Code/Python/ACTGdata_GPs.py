@@ -28,7 +28,7 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 80  # Num of simulations
+B = 7  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
@@ -37,7 +37,7 @@ data = pd.read_csv(basedir + "/simulated_1M_data.csv")
 
 # The dataset is too large
 # Randomly sample 1000 rows from the DataFrame
-data = data.sample(n=1000, random_state=1)  # You can set a random_state for reproducibility
+data = data.sample(n=10000, random_state=1)  # You can set a random_state for reproducibility
 #AIDS = "/home/onyxia/work/EstITE/Simulations/ACTG/Data/ACTGData.csv"
 
 # To save result
