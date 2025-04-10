@@ -45,7 +45,8 @@ data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
 # The dataset is too large
 # Randomly sample 1000 rows from the DataFrame
-data = data.sample(n=1000, random_state=1)  # You can set a random_state for reproducibility
+size_sample = 1000
+data = data.sample(n=size_sample, random_state=1)  # You can set a random_state for reproducibility
 #AIDS = "/home/onyxia/work/EstITE/Simulations/ACTG/Data/ACTGData.csv"
 
 # To save result
@@ -58,7 +59,7 @@ os.makedirs(results_dir, exist_ok=True)
 # Define treatment assignment
 myZ = np.array(data["treatment"])
 # Define response
-myY = np.array(data["Y"])
+# myY = np.array(data["Y"])
 # Convert X to array
 myX = np.array(data.drop(columns=["treatment"]))
 
@@ -90,12 +91,33 @@ tau = (hyperparams['delta_0'].values[0] * np.ones(myX.shape[0]) +
        hyperparams['delta_4'].values[0] * myX[:, column_indices[3]])   # gender
 
 ITE = mu_0 + tau * myZ
+# Générer le vecteur de bruit gaussien
+# bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
+
+# Fonction logistique (logit inverse)
+def logistic(x):
+    return 1 / (1 + np.exp(-x))
+
+# data["Y_proba"] = logistic(ITE + bruit_gaussien)
+
+# myY = np.array(data["Y_proba"])
+
+# Convertir en DataFrame pandas
+# df = pd.DataFrame(data, columns=["Y_proba"])
+
+# Utiliser describe pour obtenir les statistiques
+# summary = df.describe()
+
+# Afficher le résumé
+# print(summary)
+
+
 
 # Ajouter une colonne pi pour la probabilité théorique
 # data['pi'] = 1 / (1 + np.exp(-(mu_0 + tau * myZ)))
 
 # Calculer ITE_proba
-ITE_proba = 1 / (1 + np.exp(-(mu_0 + tau))) - 1 / (1 + np.exp(-mu_0))
+ITE_proba = 1 / (1 + np.exp(-(mu_0 + tau))) - 1 / (1 + np.exp(-mu_0)) #todo utiliser logistic ?
 
 
 # Results storage
@@ -119,6 +141,13 @@ for i in range(B):
 
     # Set seed
     np.random.seed(100 + i)
+
+    # Générer le vecteur de bruit gaussien
+    bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
+    #bruit_gaussien = 0
+    data["Y_proba"] = logistic(ITE + bruit_gaussien * 10)
+
+    myY = np.array(data["Y_proba"])
 
     # Train-Test Split (70-30%)
     split = np.random.choice(np.array([True, False]), N, replace=True, p=np.array([0.7, 0.3]))
