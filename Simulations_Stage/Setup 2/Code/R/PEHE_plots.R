@@ -81,10 +81,19 @@ PEHE_Test =
 
 
 # Joy plots
+
+if (!require("ggridges")) {
+  install.packages("ggridges")
+}
+
+if (!require("viridis")) {
+  install.packages("viridis")
+}
+
 library(ggridges)
 library(viridis)
 
-x_scale = 20
+x_scale = 12
 
 joy_train <-
   ggplot(PEHE_Train, aes(y = Model, x = PEHE, fill = 0.5 - abs(0.5 - stat(ecdf)))) + 
