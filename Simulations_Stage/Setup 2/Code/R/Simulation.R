@@ -895,7 +895,7 @@ sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) )
 
 # Save Results --------------------------------------------------
 
-directory_path <- "./../Results"
+directory_path <- "./Results"
 
 if (!dir.exists(directory_path)) {
   dir.create(directory_path, recursive = TRUE)
@@ -904,14 +904,14 @@ if (!dir.exists(directory_path)) {
 invisible(
   sapply(names(Results), 
          function(x) write.csv(Results[[x]], 
-                               file=paste0(getwd(), "/../Results/Logit_", B, "_", x, ".csv") ) )
+                               file=paste0(getwd(), "/Results/Logit_", B, "_", x, ".csv") ) )
 )
 
 
 write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
-          file = paste0(getwd(), "/../Results/MeanSummary_", B, ".csv"))
+          file = paste0(getwd(), "/Results/MeanSummary_", B, ".csv"))
 
 write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
-          file = paste0(getwd(), "/../Results/MCSE_Summary_", B, ".csv"))
+          file = paste0(getwd(), "/Results/MCSE_Summary_", B, ".csv"))
 
 
