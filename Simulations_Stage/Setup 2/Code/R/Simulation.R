@@ -88,23 +88,24 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 # Importer les données
 # Load Data
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
-setwd(curr_dir); setwd('./../../Data')
+setwd(curr_dir); setwd('./../../')
 
-data <- read.csv("simulated_1M_data.csv")
+data <- read.csv("./../Setup 1/Data/simulated_1M_data.csv")
 
 data_b <- data
 
 set.seed(123)
 
 data = data[sample(nrow(data)),]
-data = data[1:1000,]
+size_sample = 1000
+data = data[1:size_sample,]
 
 # Importer les hyperparamètres
-hyperparams <- read.csv("hyperparams.csv")
+hyperparams <- read.csv("./../Setup 1/Data/hyperparams.csv")
 
 # Extraire les variables nécessaires
 myZ <- data$treatment
-myY <- data$Y
+# myY <- data$Y
 myX <- data %>% select(-treatment, -Y) %>% as.matrix()
 
 # Calculer mu_0, tau, et ITE
@@ -208,7 +209,7 @@ plot(sample_size, vec_MSE, log="xy")
 # Estimation --------------------------------------------------------------
 
 ### OPTIONS
-B = 80   # Num of Simulations
+B = 7   # Num of Simulations
 N = data %>% nrow()
 
 #### PScore Estimation
@@ -219,7 +220,7 @@ PS_nn <- nnet(x = myX, y = myZ, size = 10, maxit = 2000,
 PS_est = PS_nn$fitted.values
 
 # Remove unused vars
-rm(data, hyperparams)
+rm(data)
 
 # MLearner without RF one (which do not run)
 MLearners = c('S-BART','T-BART','X-BART',
@@ -258,6 +259,13 @@ system.time(
     
     if(i<=500){set.seed(502 + i*5)}
     if(i>500){set.seed(7502 + i*5)}
+
+    bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(hyperparams$sigma_sq))
+
+    # Appliquer la fonction logistique
+    myY <- plogis(ITE + bruit_gaussien * 10)
+
+
     
     
     ### Common mu(x) model for RLOSS evaluation
