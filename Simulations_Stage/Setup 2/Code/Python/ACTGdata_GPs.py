@@ -35,7 +35,7 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 7  # Num of simulations
+B = 100  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
