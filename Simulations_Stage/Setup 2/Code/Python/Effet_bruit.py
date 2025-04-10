@@ -64,14 +64,14 @@ data_sorted = data.sort_values(by="Y_proba")
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 # Calculer la MSE et la MAE
-mse = mean_squared_error(data_sorted["Y_proba"], data_sorted["Y_proba_b"])
-mae = mean_absolute_error(data_sorted["Y_proba"], data_sorted["Y_proba_b"])
+mse = mean_squared_error(100*data_sorted["Y_proba"], 100*data_sorted["Y_proba_b"])
+mae = mean_absolute_error(100*data_sorted["Y_proba"], 100*data_sorted["Y_proba_b"])
 
 print(f"MSE: {mse}")
 print(f"MAE: {mae}")
 
 # Calculer la différence entre Y_proba et Y_proba_b
-difference = data_sorted["Y_proba"] - data_sorted["Y_proba_b"]
+difference = 100*(data_sorted["Y_proba"] - data_sorted["Y_proba_b"])
 
 # Calculer les déciles de la différence
 deciles_difference = difference.quantile(np.arange(0.1, 1.1, 0.1))
