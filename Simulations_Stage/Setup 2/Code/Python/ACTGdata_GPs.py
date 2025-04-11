@@ -145,7 +145,7 @@ for i in range(B):
     # Générer le vecteur de bruit gaussien
     bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
     #bruit_gaussien = 0
-    fac = 1
+    fac = 0
     data["Y_proba"] = logistic(ITE + bruit_gaussien * fac)
 
     myY = np.array(data["Y_proba"])
