@@ -18,8 +18,8 @@ setwd(curr_dir); setwd('./../..')
 #                   read.csv("./ACTG/Results/GP_1000_CATT_Test_PEHE.csv"))
 
 # Define the variable - number of iteration in the simulation
-num_ACTG <- 7
-num_GP <- 7
+num_ACTG <- 100
+num_GP <- 100
 
 # Construct the file paths dynamically
 file_path_train_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Train_PEHE.csv")

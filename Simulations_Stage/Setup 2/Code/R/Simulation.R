@@ -263,7 +263,8 @@ system.time(
     bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(hyperparams$sigma_sq))
 
     # Appliquer la fonction logistique
-    myY <- plogis(ITE + bruit_gaussien * 10)
+    fac = 1
+    myY <- plogis(ITE + bruit_gaussien * fac)
 
 
     
@@ -904,14 +905,14 @@ if (!dir.exists(directory_path)) {
 invisible(
   sapply(names(Results), 
          function(x) write.csv(Results[[x]], 
-                               file=paste0(getwd(), "/Results/Logit_", B, "_", x, ".csv") ) )
+                               file=paste0(getwd(), "/Results/Logit_", B, "_", x, "fac_",fac,".csv") ) )
 )
 
 
 write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
-          file = paste0(getwd(), "/Results/MeanSummary_", B, ".csv"))
+          file = paste0(getwd(), "/Results/MeanSummary_", B, "fac_",fac, ".csv"))
 
 write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
-          file = paste0(getwd(), "/Results/MCSE_Summary_", B, ".csv"))
+          file = paste0(getwd(), "/Results/MCSE_Summary_", B, "fac_",fac, ".csv"))
 
 
