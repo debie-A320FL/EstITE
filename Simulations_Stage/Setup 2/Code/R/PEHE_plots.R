@@ -20,12 +20,13 @@ setwd(curr_dir); setwd('./../..')
 # Define the variable - number of iteration in the simulation
 num_ACTG <- 100
 num_GP <- 100
+fac = 1
 
 # Construct the file paths dynamically
-file_path_train_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Train_PEHE.csv")
-file_path_train_gp <- paste0("./Results/GP_", num_GP, "_CATT_Train_PEHE.csv")
-file_path_test_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Test_PEHE.csv")
-file_path_test_gp <- paste0("./Results/GP_", num_GP, "_CATT_Test_PEHE.csv")
+file_path_train_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Train_PEHEfac_",fac,".csv")
+file_path_train_gp <- paste0("./Results/GP_", num_GP, "_CATT_Train_PEHE_fac_",fac,".csv")
+file_path_test_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Test_PEHEfac_",fac,".csv")
+file_path_test_gp <- paste0("./Results/GP_", num_GP, "_CATT_Test_PEHE_fac_",fac,".csv")
 
 # Read the CSV files using the constructed file paths
 PEHE_Train <- cbind(read.csv(file_path_train_actg), read.csv(file_path_train_gp))
@@ -93,7 +94,7 @@ if (!require("viridis")) {
 library(ggridges)
 library(viridis)
 
-x_scale = 12
+x_scale = 3
 
 joy_train <-
   ggplot(PEHE_Train, aes(y = Model, x = PEHE, fill = 0.5 - abs(0.5 - stat(ecdf)))) + 
@@ -122,8 +123,11 @@ if (!dir.exists(dossier)) {
 }
 
 # Save joy plots
-ggsave(filename = "./Figures/ACTG_Joy_Train.pdf", plot = joy_train, 
+file_path_fig_train <- paste0("./Figures/ACTG_Joy_Train_fac_",fac,".pdf")
+file_path_fig_test <- paste0("./Figures/ACTG_Joy_Test_fac_",fac,".pdf")
+
+ggsave(filename = file_path_fig_train, plot = joy_train, 
        width = 14, height = 12, units = "cm")
 
-ggsave(filename = "./Figures/ACTG_Joy_Test.pdf", plot = joy_test, 
+ggsave(filename = file_path_fig_test, plot = joy_test, 
        width = 14, height = 12, units = "cm")
