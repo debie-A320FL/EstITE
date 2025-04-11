@@ -14,7 +14,7 @@ generate_data <- function(n = 1000,
                           beta_0 = -3.5, beta_1 = 0.05, beta_2 = 0.02, beta_3 = 0.5, beta_4 = 0.3,
                           gamma_0 = 0.1, gamma_1 = 0.01, gamma_2 = 0.005, gamma_3 = 0.2, gamma_4 = 0.1,
                           delta_0 = -0.1, delta_1 = 0.005, delta_2 = 0.002, delta_3 = 0.1, delta_4 = 0.05,
-                          sigma_sq = 0.1, weight_asym = 7.5) {
+                          sigma_sq = 0.1) {
   # Documentation des paramètres
   # n : Nombre d'individus à générer
   # age_mean, age_sd : Moyenne et écart-type de la distribution de l'âge
@@ -62,12 +62,6 @@ generate_data <- function(n = 1000,
   
   # Tirer l'issue Y à partir de la probabilité
   Y <- rbinom(n, 1, prob_Y)
-
-  # Ajout d'une asymétrie : Les patients qui ont le traitement ont aussi un poids plus élevé
-  # les hommes ont un poids en moyenne plus élevé de 15, les femmes de 7.5 (par defaut)
-  weight = ifelse(Y == 1,
-      weight + (2 - gender) * weight_asym,
-      weight)
   
   # Créer un data frame avec les données générées
   data <- data.frame(age = round(age), weight = round(weight,1), gender = gender, comorbidities = comorbidities, treatment = treatment, Y = Y)
@@ -117,25 +111,30 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
   }
 }
 
-data <- generate_data(n = 1000000)
+# Data sans effet de traitement
+data <- generate_data(n = 10000,
+                      delta_0 = 0, delta_1 = 0, delta_2 = 0,
+                      delta_3 = 0, delta_4 = 0)
 
 data %>% head()
 
-
 data %>% summary()
 
-# Afficher le résumé des données pour les hommes (gender == 0)
-summary_males <- data %>% filter(gender == 0) %>% select(-gender) %>% summary()
-print(summary_males)
+data_C = data %>% filter(treatment == 0)
 
-# Afficher le résumé des données pour les femmes (gender == 0)
-summary_females <- data %>% filter(gender == 1) %>% select(-gender) %>% summary()
-print(summary_females)
+data_C$Y %>% as.numeric() %>% mean() - 1
+
+data_T = data %>% filter(treatment == 1)
+
+data_T$Y %>% as.numeric() %>% mean() - 1
+
+# Résultats semblables, les erreurs viennent du terme d'erreur
+
 
 data %>%
   filter(gender == 0) %>%
   summarise(proportion = mean(treatment == 1))
 
-export_data_to_csv(data, file_name = "simulated_1M_data.csv",
+export_data_to_csv(data, file_name = "simulated_data_null_CATE.csv",
                    directory = ".",
                    overwrite = FALSE)
