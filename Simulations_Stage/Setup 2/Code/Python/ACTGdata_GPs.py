@@ -145,7 +145,8 @@ for i in range(B):
     # Générer le vecteur de bruit gaussien
     bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
     #bruit_gaussien = 0
-    data["Y_proba"] = logistic(ITE + bruit_gaussien * 10)
+    fac = 1
+    data["Y_proba"] = logistic(ITE + bruit_gaussien * fac)
 
     myY = np.array(data["Y_proba"])
 
@@ -222,7 +223,7 @@ summary = {}
 
 for name in Results.keys():
     PD_results = pd.DataFrame(Results[name], columns=models)
-    PD_results.to_csv(basedir_setup_2 + "/Results/GP_%s_%s.csv" % (B, name), index=False, header=True)
+    PD_results.to_csv(basedir_setup_2 + "/Results/GP_%s_%s_fac_%s.csv" % (B, name, fac), index=False, header=True)
 
     aux = {name: {'CMGP': np.c_[np.mean(PD_results['CMGP']), MC_se(PD_results['CMGP'], B)],
                   'NSGP': np.c_[np.mean(PD_results['NSGP']), MC_se(PD_results['NSGP'], B)]}}
