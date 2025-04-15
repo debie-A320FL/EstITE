@@ -90,7 +90,7 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
 
-data <- read.csv("./../Setup 1/Data/simulated_1M_data.csv")
+data <- read.csv("./../Setup 3/Data/simulated_data_null_CATE.csv")
 
 data_b <- data
 
@@ -101,7 +101,7 @@ size_sample = 1000
 data = data[1:size_sample,]
 
 # Importer les hyperparamètres
-hyperparams <- read.csv("./../Setup 1/Data/hyperparams.csv")
+hyperparams <- read.csv("./../Setup 3/Data/hyperparams.csv")
 
 # Extraire les variables nécessaires
 myZ <- data$treatment
@@ -112,6 +112,8 @@ myX <- data %>% select(-treatment, -Y) %>% as.matrix()
 mu_0 <- hyperparams$gamma_0 + hyperparams$gamma_1 * myX[, "age"] + hyperparams$gamma_2 * myX[, "weight"] + hyperparams$gamma_3 * myX[, "comorbidities"] + hyperparams$gamma_4 * myX[, "gender"]
 tau <- hyperparams$delta_0 + hyperparams$delta_1 * myX[, "age"] + hyperparams$delta_2 * myX[, "weight"] + hyperparams$delta_3 * myX[, "comorbidities"] + hyperparams$delta_4 * myX[, "gender"]
 ITE <- mu_0 + tau * myZ
+
+print(paste0("min/max tau : ", min(tau)," & ", max(tau)))
 
 # Ajouter une colonne pi pour la probabilité théorique
 data$pi <- 1 / (1 + exp(-(mu_0 + tau * myZ)))
@@ -263,7 +265,7 @@ system.time(
     bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(hyperparams$sigma_sq))
 
     # Appliquer la fonction logistique
-    fac = 1
+    fac = 0
     myY <- plogis(ITE + bruit_gaussien * fac)
 
 
