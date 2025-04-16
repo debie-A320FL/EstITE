@@ -40,8 +40,8 @@ B = 100  # Num of simulations
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 # Utilisation des données de setup 1
-basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1/Data"
-data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
+basedir_setup_3 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 3/Data"
+data = pd.read_csv(basedir_setup_3 + "/simulated_data_null_CATE.csv")
 
 # The dataset is too large
 # Randomly sample 1000 rows from the DataFrame
@@ -51,8 +51,7 @@ data = data.sample(n=size_sample, random_state=1)  # You can set a random_state 
 
 # To save result
 # Define the full path
-basedir_setup_2 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2/"
-results_dir = os.path.join(basedir_setup_2, "Results")
+results_dir = os.path.join(basedir_setup_3, "Results")
 # Create the directory if it doesn't exist
 os.makedirs(results_dir, exist_ok=True)
 
@@ -71,7 +70,7 @@ myX = np.array(data.drop(columns=["treatment"]))
 N, P = data.drop(columns=["treatment"]).shape
 
 # Importer les hyperparamètres
-hyperparams = pd.read_csv(basedir_setup_1 + "/hyperparams.csv")
+hyperparams = pd.read_csv(basedir_setup_3 + "/hyperparams.csv")
 
 # Obtenir les indices des colonnes par leurs noms
 column_names = ["age", "weight", "comorbidities", "gender"]
@@ -91,6 +90,9 @@ tau = (hyperparams['delta_0'].values[0] * np.ones(myX.shape[0]) +
        hyperparams['delta_4'].values[0] * myX[:, column_indices[3]])   # gender
 
 ITE = mu_0 + tau * myZ
+
+print(f"tau (min,max) : {(min(tau), max(tau))}")
+
 # Générer le vecteur de bruit gaussien
 # bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
 
@@ -145,7 +147,7 @@ for i in range(B):
     # Générer le vecteur de bruit gaussien
     bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
     #bruit_gaussien = 0
-    fac = 0
+    fac = 1
     data["Y_proba"] = logistic(ITE + bruit_gaussien * fac)
 
     myY = np.array(data["Y_proba"])
@@ -221,9 +223,11 @@ print("\n\nElapsed time (in h) is", round(elapsed/3600, 2)) # 2h for B=100
 models = ['CMGP', 'NSGP']
 summary = {}
 
+basedir_setup_3 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 3"
+
 for name in Results.keys():
     PD_results = pd.DataFrame(Results[name], columns=models)
-    PD_results.to_csv(basedir_setup_2 + "/Results/GP_%s_%s_fac_%s.csv" % (B, name, fac), index=False, header=True)
+    PD_results.to_csv(basedir_setup_3 + "/Results/GP_%s_%s_fac_%s.csv" % (B, name, fac), index=False, header=True)
 
     aux = {name: {'CMGP': np.c_[np.mean(PD_results['CMGP']), MC_se(PD_results['CMGP'], B)],
                   'NSGP': np.c_[np.mean(PD_results['NSGP']), MC_se(PD_results['NSGP'], B)]}}
