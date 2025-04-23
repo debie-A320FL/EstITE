@@ -30,217 +30,221 @@ B = 80  # Num of simulations
 
 # Load AIDS data
 basedir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1/Data"
-data = pd.read_csv(basedir + "/simulated_1M_data.csv")
 
 # The dataset is too large
 # Randomly sample 1000 rows from the DataFrame
-data = data.sample(n=1000, random_state=1)  # You can set a random_state for reproducibility
+N_size = [1000, 4000]
 
-# To save result
-# Define the full path
-results_dir = os.path.join(basedir, "..", "Results")
-# Create the directory if it doesn't exist
-os.makedirs(results_dir, exist_ok=True)
+for N in N_size:
+    print(f"N = {N}")
+    data = pd.read_csv(basedir + "/simulated_1M_data.csv")
+    data = data.sample(n=N, random_state=1)  # You can set a random_state for reproducibility
 
-# Define treatment assignment
-myZ = np.array(data["treatment"])
-# Define response
-myY = np.array(data["Y"])
-# Convert X to array
-myX = np.array(data.drop(columns=["treatment", "Y"]))
+    # To save result
+    # Define the full path
+    results_dir = os.path.join(basedir, "..", "Results")
+    # Create the directory if it doesn't exist
+    os.makedirs(results_dir, exist_ok=True)
 
-# Scale numeric
-# to_scale = ["age", "wtkg", "preanti"]
-# AIDS[to_scale] = preprocessing.scale(AIDS[to_scale])
+    # Define treatment assignment
+    myZ = np.array(data["treatment"])
+    # Define response
+    myY = np.array(data["Y"])
+    # Convert X to array
+    myX = np.array(data.drop(columns=["treatment", "Y"]))
 
-# Pred and obs
-N, P = data.drop(columns=["treatment", "Y"]).shape
+    # Scale numeric
+    # to_scale = ["age", "wtkg", "preanti"]
+    # AIDS[to_scale] = preprocessing.scale(AIDS[to_scale])
 
-# Importer les hyperparamètres
-hyperparams = pd.read_csv(basedir + "/hyperparams.csv")
+    # Pred and obs
+    N, P = data.drop(columns=["treatment", "Y"]).shape
 
-# Obtenir les indices des colonnes par leurs noms
-column_names = ["age", "weight", "comorbidities", "gender"]
-column_indices = [data.columns.get_loc(col) for col in column_names]
+    # Importer les hyperparamètres
+    hyperparams = pd.read_csv(basedir + "/hyperparams.csv")
 
-# Calculer mu_0, tau, et ITE
-mu_0 = (hyperparams['gamma_0'].values[0] * np.ones(myX.shape[0]) +
-        hyperparams['gamma_1'].values[0] * myX[:, column_indices[0]] +  # age
-        hyperparams['gamma_2'].values[0] * myX[:, column_indices[1]] +  # weight
-        hyperparams['gamma_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
-        hyperparams['gamma_4'].values[0] * myX[:, column_indices[3]])   # gender
+    # Obtenir les indices des colonnes par leurs noms
+    column_names = ["age", "weight", "comorbidities", "gender"]
+    column_indices = [data.columns.get_loc(col) for col in column_names]
 
-tau = (hyperparams['delta_0'].values[0] * np.ones(myX.shape[0]) +
-       hyperparams['delta_1'].values[0] * myX[:, column_indices[0]] +  # age
-       hyperparams['delta_2'].values[0] * myX[:, column_indices[1]] +  # weight
-       hyperparams['delta_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
-       hyperparams['delta_4'].values[0] * myX[:, column_indices[3]])   # gender
+    # Calculer mu_0, tau, et ITE
+    mu_0 = (hyperparams['gamma_0'].values[0] * np.ones(myX.shape[0]) +
+            hyperparams['gamma_1'].values[0] * myX[:, column_indices[0]] +  # age
+            hyperparams['gamma_2'].values[0] * myX[:, column_indices[1]] +  # weight
+            hyperparams['gamma_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
+            hyperparams['gamma_4'].values[0] * myX[:, column_indices[3]])   # gender
 
-ITE = mu_0 + tau * myZ
+    tau = (hyperparams['delta_0'].values[0] * np.ones(myX.shape[0]) +
+        hyperparams['delta_1'].values[0] * myX[:, column_indices[0]] +  # age
+        hyperparams['delta_2'].values[0] * myX[:, column_indices[1]] +  # weight
+        hyperparams['delta_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
+        hyperparams['delta_4'].values[0] * myX[:, column_indices[3]])   # gender
 
-# Calculer ITE_proba
-ITE_proba = 1 / (1 + np.exp(-(mu_0 + tau))) - 1 / (1 + np.exp(-mu_0))
+    ITE = mu_0 + tau * myZ
 
-# Results storage
-esti = ['CATT', 'CATC']
-subs = ['Train', 'Test']
-loss = ['Bias', 'PEHE']  # RLOSS not stored atm
+    # Calculer ITE_proba
+    ITE_proba = 1 / (1 + np.exp(-(mu_0 + tau))) - 1 / (1 + np.exp(-mu_0))
 
-Results = {}
-for i in range(2):
-    for k in range(2):
-        for j in loss:
-            dest = {'%s_%s_%s' % (esti[i], subs[k], j): np.zeros((B, 3))}  # 3 models: CMGP, NSGP, Logistic
-            Results.update(dest)
+    # Results storage
+    esti = ['CATT', 'CATC']
+    subs = ['Train', 'Test']
+    loss = ['Bias', 'PEHE']  # RLOSS not stored atm
 
-##### Simulation Study
-start = time.time()
+    Results = {}
+    for i in range(2):
+        for k in range(2):
+            for j in loss:
+                dest = {'%s_%s_%s' % (esti[i], subs[k], j): np.zeros((B, 3))}  # 3 models: CMGP, NSGP, Logistic
+                Results.update(dest)
 
-for i in range(B):
+    ##### Simulation Study
+    start = time.time()
 
-    print("\n*** Iteration", i + 1)
+    for i in range(B):
 
-    # Set seed
-    np.random.seed(100 + i)
+        print("\n*** Iteration", i + 1)
 
-    # Train-Test Split (70-30%)
-    split = np.random.choice(np.array([True, False]), N, replace=True, p=np.array([0.7, 0.3]))
+        # Set seed
+        np.random.seed(100 + i)
 
-    x_train = np.array(myX[split])
-    x_test = np.array(myX[~split])
+        # Train-Test Split (70-30%)
+        split = np.random.choice(np.array([True, False]), N, replace=True, p=np.array([0.7, 0.3]))
 
-    y_train = np.array(myY[split])
-    y_test = np.array(myY[~split])
+        x_train = np.array(myX[split])
+        x_test = np.array(myX[~split])
 
-    z_train = np.array(myZ[split])
-    z_test = np.array(myZ[~split])
+        y_train = np.array(myY[split])
+        y_test = np.array(myY[~split])
 
-    ITE_train = np.array(ITE_proba[split])
-    ITE_test = np.array(ITE_proba[~split])
+        z_train = np.array(myZ[split])
+        z_test = np.array(myZ[~split])
 
-    CATT_Train = ITE_train[z_train == 1]
-    CATC_Train = ITE_train[z_train == 0]
-    CATT_Test = ITE_test[z_test == 1]
-    CATC_Test = ITE_test[z_test == 0]
+        ITE_train = np.array(ITE_proba[split])
+        ITE_test = np.array(ITE_proba[~split])
 
-    # 1) CMGP
-    myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
-    myCMGP.fit(X=x_train, Y=y_train, W=z_train)
+        CATT_Train = ITE_train[z_train == 1]
+        CATC_Train = ITE_train[z_train == 0]
+        CATT_Test = ITE_test[z_test == 1]
+        CATC_Test = ITE_test[z_test == 0]
 
-    train_CMGP_est = myCMGP.predict(x_train)[0]
-    test_CMGP_est = myCMGP.predict(x_test)[0]
+        # 1) CMGP
+        myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
+        myCMGP.fit(X=x_train, Y=y_train, W=z_train)
 
-    # CATT
-    Results['CATT_Train_Bias'][i, 0] = bias(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
-    Results['CATT_Train_PEHE'][i, 0] = PEHE(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
+        train_CMGP_est = myCMGP.predict(x_train)[0]
+        test_CMGP_est = myCMGP.predict(x_test)[0]
 
-    Results['CATT_Test_Bias'][i, 0] = bias(CATT_Test, test_CMGP_est.reshape(-1)[z_test == 1])
-    Results['CATT_Test_PEHE'][i, 0] = PEHE(CATT_Test, test_CMGP_est.reshape(-1)[z_test == 1])
+        # CATT
+        Results['CATT_Train_Bias'][i, 0] = bias(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
+        Results['CATT_Train_PEHE'][i, 0] = PEHE(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
 
-    # CATC
-    Results['CATC_Train_Bias'][i, 0] = bias(CATC_Train, train_CMGP_est.reshape(-1)[z_train == 0])
-    Results['CATC_Train_PEHE'][i, 0] = PEHE(CATC_Train, train_CMGP_est.reshape(-1)[z_train == 0])
+        Results['CATT_Test_Bias'][i, 0] = bias(CATT_Test, test_CMGP_est.reshape(-1)[z_test == 1])
+        Results['CATT_Test_PEHE'][i, 0] = PEHE(CATT_Test, test_CMGP_est.reshape(-1)[z_test == 1])
 
-    Results['CATC_Test_Bias'][i, 0] = bias(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
-    Results['CATC_Test_PEHE'][i, 0] = PEHE(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
+        # CATC
+        Results['CATC_Train_Bias'][i, 0] = bias(CATC_Train, train_CMGP_est.reshape(-1)[z_train == 0])
+        Results['CATC_Train_PEHE'][i, 0] = PEHE(CATC_Train, train_CMGP_est.reshape(-1)[z_train == 0])
 
-    # 2) NSGP
-    myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern')
-    myNSGP.fit(X=x_train, Y=y_train, W=z_train)
+        Results['CATC_Test_Bias'][i, 0] = bias(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
+        Results['CATC_Test_PEHE'][i, 0] = PEHE(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
 
-    train_NSGP_est = myNSGP.predict(x_train)[0]
-    test_NSGP_est = myNSGP.predict(x_test)[0]
+        # 2) NSGP
+        myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern')
+        myNSGP.fit(X=x_train, Y=y_train, W=z_train)
 
-    # CATT
-    Results['CATT_Train_Bias'][i, 1] = bias(CATT_Train, train_NSGP_est.reshape(-1)[z_train == 1])
-    Results['CATT_Train_PEHE'][i, 1] = PEHE(CATT_Train, train_NSGP_est.reshape(-1)[z_train == 1])
+        train_NSGP_est = myNSGP.predict(x_train)[0]
+        test_NSGP_est = myNSGP.predict(x_test)[0]
 
-    Results['CATT_Test_Bias'][i, 1] = bias(CATT_Test, test_NSGP_est.reshape(-1)[z_test == 1])
-    Results['CATT_Test_PEHE'][i, 1] = PEHE(CATT_Test, test_NSGP_est.reshape(-1)[z_test == 1])
+        # CATT
+        Results['CATT_Train_Bias'][i, 1] = bias(CATT_Train, train_NSGP_est.reshape(-1)[z_train == 1])
+        Results['CATT_Train_PEHE'][i, 1] = PEHE(CATT_Train, train_NSGP_est.reshape(-1)[z_train == 1])
 
-    # CATC
-    Results['CATC_Train_Bias'][i, 1] = bias(CATC_Train, train_NSGP_est.reshape(-1)[z_train == 0])
-    Results['CATC_Train_PEHE'][i, 1] = PEHE(CATC_Train, train_NSGP_est.reshape(-1)[z_train == 0])
+        Results['CATT_Test_Bias'][i, 1] = bias(CATT_Test, test_NSGP_est.reshape(-1)[z_test == 1])
+        Results['CATT_Test_PEHE'][i, 1] = PEHE(CATT_Test, test_NSGP_est.reshape(-1)[z_test == 1])
 
-    Results['CATC_Test_Bias'][i, 1] = bias(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
-    Results['CATC_Test_PEHE'][i, 1] = PEHE(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
+        # CATC
+        Results['CATC_Train_Bias'][i, 1] = bias(CATC_Train, train_NSGP_est.reshape(-1)[z_train == 0])
+        Results['CATC_Train_PEHE'][i, 1] = PEHE(CATC_Train, train_NSGP_est.reshape(-1)[z_train == 0])
 
-    # 3) Logistic Regression with Interaction Terms using patsy
-    # Create DataFrames for train and test sets
-    df_train = pd.DataFrame(x_train, columns=column_names)
-    df_train['treatment'] = z_train
-    df_train['y'] = y_train
+        Results['CATC_Test_Bias'][i, 1] = bias(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
+        Results['CATC_Test_PEHE'][i, 1] = PEHE(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
 
-    df_test = pd.DataFrame(x_test, columns=column_names)
-    df_test['treatment'] = z_test
-    df_test['y'] = y_test
+        # 3) Logistic Regression with Interaction Terms using patsy
+        # Create DataFrames for train and test sets
+        df_train = pd.DataFrame(x_train, columns=column_names)
+        df_train['treatment'] = z_train
+        df_train['y'] = y_train
 
-    # Define the formula with interaction terms
-    formula = 'y ~ age + weight + comorbidities + gender + treatment + treatment:age + treatment:weight + treatment:comorbidities + treatment:gender'
+        df_test = pd.DataFrame(x_test, columns=column_names)
+        df_test['treatment'] = z_test
+        df_test['y'] = y_test
 
-    # Create design matrices
-    y_train_patsy, X_train_patsy = patsy.dmatrices(formula, df_train, return_type='dataframe')
-    y_test_patsy, X_test_patsy = patsy.dmatrices(formula, df_test, return_type='dataframe')
+        # Define the formula with interaction terms
+        formula = 'y ~ age + weight + comorbidities + gender + treatment + treatment:age + treatment:weight + treatment:comorbidities + treatment:gender'
 
-    # Fit logistic regression model
-    logit_model = sm.Logit(y_train_patsy, X_train_patsy)
-    logit_result = logit_model.fit()
+        # Create design matrices
+        y_train_patsy, X_train_patsy = patsy.dmatrices(formula, df_train, return_type='dataframe')
+        y_test_patsy, X_test_patsy = patsy.dmatrices(formula, df_test, return_type='dataframe')
 
-    # Create copies of the DataFrames with treatment set to 1 and 0
-    df_train_t1 = df_train.copy()
-    df_train_t0 = df_train.copy()
-    df_test_t1 = df_test.copy()
-    df_test_t0 = df_test.copy()
+        # Fit logistic regression model
+        logit_model = sm.Logit(y_train_patsy, X_train_patsy)
+        logit_result = logit_model.fit()
 
-    df_train_t1['treatment'] = 1
-    df_train_t0['treatment'] = 0
-    df_test_t1['treatment'] = 1
-    df_test_t0['treatment'] = 0
+        # Create copies of the DataFrames with treatment set to 1 and 0
+        df_train_t1 = df_train.copy()
+        df_train_t0 = df_train.copy()
+        df_test_t1 = df_test.copy()
+        df_test_t0 = df_test.copy()
 
-    # Recreate design matrices with updated treatment values
-    _, X_train_patsy_t1 = patsy.dmatrices(formula, df_train_t1, return_type='dataframe')
-    _, X_train_patsy_t0 = patsy.dmatrices(formula, df_train_t0, return_type='dataframe')
-    _, X_test_patsy_t1 = patsy.dmatrices(formula, df_test_t1, return_type='dataframe')
-    _, X_test_patsy_t0 = patsy.dmatrices(formula, df_test_t0, return_type='dataframe')
+        df_train_t1['treatment'] = 1
+        df_train_t0['treatment'] = 0
+        df_test_t1['treatment'] = 1
+        df_test_t0['treatment'] = 0
 
-    # Predict probabilities for treatment and control
-    train_logit_est_t1 = logit_result.predict(X_train_patsy_t1).values
-    train_logit_est_t0 = logit_result.predict(X_train_patsy_t0).values
-    test_logit_est_t1 = logit_result.predict(X_test_patsy_t1).values
-    test_logit_est_t0 = logit_result.predict(X_test_patsy_t0).values
+        # Recreate design matrices with updated treatment values
+        _, X_train_patsy_t1 = patsy.dmatrices(formula, df_train_t1, return_type='dataframe')
+        _, X_train_patsy_t0 = patsy.dmatrices(formula, df_train_t0, return_type='dataframe')
+        _, X_test_patsy_t1 = patsy.dmatrices(formula, df_test_t1, return_type='dataframe')
+        _, X_test_patsy_t0 = patsy.dmatrices(formula, df_test_t0, return_type='dataframe')
 
-    # Compute treatment effect
-    train_logit_est = train_logit_est_t1 - train_logit_est_t0
-    test_logit_est = test_logit_est_t1 - test_logit_est_t0
+        # Predict probabilities for treatment and control
+        train_logit_est_t1 = logit_result.predict(X_train_patsy_t1).values
+        train_logit_est_t0 = logit_result.predict(X_train_patsy_t0).values
+        test_logit_est_t1 = logit_result.predict(X_test_patsy_t1).values
+        test_logit_est_t0 = logit_result.predict(X_test_patsy_t0).values
 
-    # CATT
-    Results['CATT_Train_Bias'][i, 2] = bias(CATT_Train, train_logit_est[z_train == 1])
-    Results['CATT_Train_PEHE'][i, 2] = PEHE(CATT_Train, train_logit_est[z_train == 1])
+        # Compute treatment effect
+        train_logit_est = train_logit_est_t1 - train_logit_est_t0
+        test_logit_est = test_logit_est_t1 - test_logit_est_t0
 
-    Results['CATT_Test_Bias'][i, 2] = bias(CATT_Test, test_logit_est[z_test == 1])
-    Results['CATT_Test_PEHE'][i, 2] = PEHE(CATT_Test, test_logit_est[z_test == 1])
+        # CATT
+        Results['CATT_Train_Bias'][i, 2] = bias(CATT_Train, train_logit_est[z_train == 1])
+        Results['CATT_Train_PEHE'][i, 2] = PEHE(CATT_Train, train_logit_est[z_train == 1])
 
-    # CATC
-    Results['CATC_Train_Bias'][i, 2] = bias(CATC_Train, train_logit_est[z_train == 0])
-    Results['CATC_Train_PEHE'][i, 2] = PEHE(CATC_Train, train_logit_est[z_train == 0])
+        Results['CATT_Test_Bias'][i, 2] = bias(CATT_Test, test_logit_est[z_test == 1])
+        Results['CATT_Test_PEHE'][i, 2] = PEHE(CATT_Test, test_logit_est[z_test == 1])
 
-    Results['CATC_Test_Bias'][i, 2] = bias(CATC_Test, test_logit_est[z_test == 0])
-    Results['CATC_Test_PEHE'][i, 2] = PEHE(CATC_Test, test_logit_est[z_test == 0])
+        # CATC
+        Results['CATC_Train_Bias'][i, 2] = bias(CATC_Train, train_logit_est[z_train == 0])
+        Results['CATC_Train_PEHE'][i, 2] = PEHE(CATC_Train, train_logit_est[z_train == 0])
 
-elapsed = time.time() - start
-print("\n\nElapsed time (in h) is", round(elapsed / 3600, 2))  # 2h for B=100
+        Results['CATC_Test_Bias'][i, 2] = bias(CATC_Test, test_logit_est[z_test == 0])
+        Results['CATC_Test_PEHE'][i, 2] = PEHE(CATC_Test, test_logit_est[z_test == 0])
 
-models = ['CMGP', 'NSGP', 'Logistic']
-summary = {}
+    elapsed = time.time() - start
+    print("\n\nElapsed time (in h) is", round(elapsed / 3600, 2))  # 2h for B=100
 
-for name in Results.keys():
-    PD_results = pd.DataFrame(Results[name], columns=models)
-    PD_results.to_csv(os.path.join(results_dir, "GP_%s_%s.csv" % (B, name)), index=False, header=True)
+    models = ['CMGP', 'NSGP', 'Logistic']
+    summary = {}
 
-    aux = {name: {'CMGP': np.c_[np.mean(PD_results['CMGP']), MC_se(PD_results['CMGP'], B)],
-                  'NSGP': np.c_[np.mean(PD_results['NSGP']), MC_se(PD_results['NSGP'], B)],
-                  'Logistic': np.c_[np.mean(PD_results['Logistic']), MC_se(PD_results['Logistic'], B)]}}
-    summary.update(aux)
+    for name in Results.keys():
+        PD_results = pd.DataFrame(Results[name], columns=models)
+        PD_results.to_csv(os.path.join(results_dir, "GP_%s_%s_Nsize_%s.csv" % (B, name, N)), index=False, header=True)
 
-print(pd.DataFrame(summary).T)
-print("\n\n++++++++  FINISHED  +++++++++")
+        aux = {name: {'CMGP': np.c_[np.mean(PD_results['CMGP']), MC_se(PD_results['CMGP'], B)],
+                    'NSGP': np.c_[np.mean(PD_results['NSGP']), MC_se(PD_results['NSGP'], B)],
+                    'Logistic': np.c_[np.mean(PD_results['Logistic']), MC_se(PD_results['Logistic'], B)]}}
+        summary.update(aux)
+
+    print(pd.DataFrame(summary).T)
+    print("\n\n++++++++  FINISHED  +++++++++")
