@@ -1,0 +1,29 @@
+---
+title: "StatisticsOnData"
+output: html_document
+---
+
+```{r}
+library(dplyr)
+```
+
+
+```{r}
+curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
+setwd(curr_dir); setwd('./../../Data')
+
+data <- read.csv("simulated_1M_data.csv")
+```
+
+
+```{r}
+data %>% head()
+```
+
+```{r}
+mean(data$treatment == 1)
+```
+```{r}
+mean(data$Y == 1)
+```
+
