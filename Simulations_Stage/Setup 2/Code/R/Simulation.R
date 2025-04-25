@@ -90,7 +90,7 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
 
-list_fac <- c(0,0.1, 0.5,1)
+list_fac <- c(2,3,5)
 for (fac in list_fac) {
   print(paste("fac =", fac))
 
