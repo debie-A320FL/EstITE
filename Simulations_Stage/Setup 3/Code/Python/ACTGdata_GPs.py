@@ -54,7 +54,7 @@ data = data.sample(n=size_sample, random_state=1)  # You can set a random_state 
 
 # To save result
 # Define the full path
-results_dir = basedir_setup_3 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 3/Results"
+results_dir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 3/Results"
 # Create the directory if it doesn't exist
 os.makedirs(results_dir, exist_ok=True)
 
@@ -73,7 +73,7 @@ myX = np.array(data.drop(columns=["treatment", "Y"]))
 N, P = data.drop(columns=["treatment","Y"]).shape
 
 # Importer les hyperparamètres
-hyperparams = pd.read_csv(basedir_setup_3 + "/hyperparams.csv")
+hyperparams = pd.read_csv(basedir_setup_3 + "Data/hyperparams.csv")
 
 # Obtenir les indices des colonnes par leurs noms
 column_names = ["age", "weight", "comorbidities", "gender"]
@@ -140,7 +140,7 @@ for i in range(2):
 ##### Simulation Study
 start = time.time()
 
-list_fac = [0,0.1,0.5,1]
+list_fac = [2,3,5]
 
 for fac in list_fac:
     print(f"fac = {fac}")
