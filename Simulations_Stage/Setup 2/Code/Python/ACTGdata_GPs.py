@@ -138,7 +138,7 @@ for i in range(2):
 ##### Simulation Study
 start = time.time()
 
-list_fac = [0,0.1,0.5,1]
+list_fac = [2,3,5]
 
 for fac in list_fac:
     print(f"fac = {fac}")
