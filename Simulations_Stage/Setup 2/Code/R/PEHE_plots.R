@@ -102,6 +102,7 @@ joy_train <-
   scale_fill_viridis_c(name = "Tail Probability", begin = 0.1, direction = -1, option = "C") +
   geom_vline(xintercept = 0, linetype = "dotted") +
   scale_x_continuous(limits = c(0, x_scale), breaks = seq(0, x_scale, by = x_scale/4)) + xlab(expression(sqrt(PEHE))) +
+  ggtitle(paste0("Model error Distribution (fac = ", fac, ")")) +
   theme_ridges() + theme(legend.position = "none")
 
 
@@ -111,6 +112,7 @@ joy_test <-
   scale_fill_viridis_c(name = "Tail Probability", begin = 0.1, direction = -1, option = "C") +
   geom_vline(xintercept = 0, linetype = "dotted") +
   scale_x_continuous(limits = c(0, x_scale), breaks = seq(0, x_scale, by = x_scale/4)) + xlab(expression(sqrt(PEHE))) +
+  ggtitle(paste0("Model error Distribution (fac = ", fac, ")")) +
   theme_ridges() + theme(legend.position = "none")
 
 
