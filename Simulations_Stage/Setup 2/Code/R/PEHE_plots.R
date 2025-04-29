@@ -18,15 +18,15 @@ setwd(curr_dir); setwd('./../..')
 #                   read.csv("./ACTG/Results/GP_1000_CATT_Test_PEHE.csv"))
 
 # Define the variable - number of iteration in the simulation
-num_ACTG <- 100
-num_GP <- 100
-fac = 0
+
+generate_joy_plot <- function(fac = 0, num_ACTG = 80, num_GP =80, x_scale = 0.5){
+  
 
 # Construct the file paths dynamically
-file_path_train_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Train_PEHE_fac_",fac,".csv")
-file_path_train_gp <- paste0("./Results/GP_", num_GP, "_CATT_Train_PEHE_fac_",fac,".csv")
-file_path_test_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Test_PEHE_fac_",fac,".csv")
-file_path_test_gp <- paste0("./Results/GP_", num_GP, "_CATT_Test_PEHE_fac_",fac,".csv")
+file_path_train_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Train_PEHE_fac_",fac,"_Nsize_1000.csv")
+file_path_train_gp <- paste0("./Results/GP_", num_GP, "_CATT_Train_PEHE_Nsize_1000_fac_",fac,".csv")
+file_path_test_actg <- paste0("./Results/Logit_", num_ACTG, "_CATT_Test_PEHE_fac_",fac,"_Nsize_1000.csv")
+file_path_test_gp <- paste0("./Results/GP_", num_GP, "_CATT_Test_PEHE_Nsize_1000_fac_",fac,".csv")
 
 # Read the CSV files using the constructed file paths
 PEHE_Train <- cbind(read.csv(file_path_train_actg), read.csv(file_path_train_gp))
@@ -44,7 +44,7 @@ PEHE_Test = reshape(data = PEHE_Test, varying = list(names(PEHE_Test)), timevar 
 #             "X-BART", "X-RF", "T-BART", "T-RF", "S-BART", "S-RF")
 
 m_order = c("BCF", "NSGP", "CMGP", "CF", "R-BOOST", "R-LASSO", 
-            "X-BART", "T-BART", "S-BART")
+            "X-BART", "T-BART", "S-BART", 'S-RF', "T-RF","X-RF", "Logistic")
 
 PEHE_Train = 
   PEHE_Train %>%
@@ -94,14 +94,14 @@ if (!require("viridis")) {
 library(ggridges)
 library(viridis)
 
-x_scale = 0.5
+# x_scale = 0.5
 
 joy_train <-
   ggplot(PEHE_Train, aes(y = Model, x = PEHE, fill = 0.5 - abs(0.5 - stat(ecdf)))) + 
   stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE, scale = 1.5) +
   scale_fill_viridis_c(name = "Tail Probability", begin = 0.1, direction = -1, option = "C") +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  scale_x_continuous(limits = c(0, x_scale), breaks = seq(0, x_scale, 2)) + xlab(expression(sqrt(PEHE))) +
+  scale_x_continuous(limits = c(0, x_scale), breaks = seq(0, x_scale, by = x_scale/4)) + xlab(expression(sqrt(PEHE))) +
   theme_ridges() + theme(legend.position = "none")
 
 
@@ -110,7 +110,7 @@ joy_test <-
   stat_density_ridges(geom = "density_ridges_gradient", calc_ecdf = TRUE, scale = 1.5) +
   scale_fill_viridis_c(name = "Tail Probability", begin = 0.1, direction = -1, option = "C") +
   geom_vline(xintercept = 0, linetype = "dotted") +
-  scale_x_continuous(limits = c(0, x_scale), breaks = seq(0, x_scale, 2)) + xlab(expression(sqrt(PEHE))) +
+  scale_x_continuous(limits = c(0, x_scale), breaks = seq(0, x_scale, by = x_scale/4)) + xlab(expression(sqrt(PEHE))) +
   theme_ridges() + theme(legend.position = "none")
 
 
@@ -131,3 +131,20 @@ ggsave(filename = file_path_fig_train, plot = joy_train,
 
 ggsave(filename = file_path_fig_test, plot = joy_test, 
        width = 14, height = 12, units = "cm")
+
+}
+
+
+generate_joy_plot(fac =0, x_scale = 0.3)
+
+generate_joy_plot(fac =0.1, x_scale = 0.6)
+
+generate_joy_plot(fac =0.5, x_scale = 1.5)
+
+generate_joy_plot(fac =1, x_scale = 3)
+
+generate_joy_plot(fac =2, x_scale = 5)
+
+generate_joy_plot(fac =3, x_scale = 7)
+
+generate_joy_plot(fac =5, x_scale = 9)
