@@ -141,6 +141,10 @@ for (fac in list_fac){
   rug(diff_Y)
 }
 ```
+```{r}
+bruit_gaussien <- rnorm(1000, mean = 0, sd = 2)
+print(var(bruit_gaussien))
+```
 
 
 ```{r}
