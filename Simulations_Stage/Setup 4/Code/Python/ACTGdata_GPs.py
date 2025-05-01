@@ -29,15 +29,15 @@ def r_loss(y, mu, z, pi, tau):
 B = 80  # Num of simulations
 
 # Load AIDS data
-basedir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1/Data"
+basedir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Data"
 
 # The dataset is too large
 # Randomly sample 1000 rows from the DataFrame
-N_size = [1000, 4000]
+N_size = [500,1000, 4000]
 
 for N in N_size:
     print(f"N = {N}")
-    data = pd.read_csv(basedir + "/simulated_1M_data.csv")
+    data = pd.read_csv(basedir + "/simulated_data_null_CATE.csv")
     data = data.sample(n=N, random_state=1)  # You can set a random_state for reproducibility
 
     # To save result
