@@ -90,15 +90,15 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../Data')
 
-data <- read.csv("simulated_1M_data.csv")
-
 data_b <- data
 
 set.seed(123)
 
-list_sample_size <- c(500,1000,4000)
+list_sample_size <- c(1000,4000)
 for (N in list_sample_size) {
   print(paste("N =", N))
+  
+data <- read.csv("simulated_1M_data.csv")
 
 data = data[sample(nrow(data)),]
 data = data[1:N,]
@@ -426,7 +426,7 @@ system.time(
     
     
     # #################### T-RF # Does not run atm
-    # TRF <- T_RF(train_augmX, z_train, y_train)
+    TRF <- T_RF(train_augmX, z_train, y_train)
     train_est = EstimateCate(TRF, train_augmX)
     test_est = EstimateCate(TRF, test_augmX)
 
