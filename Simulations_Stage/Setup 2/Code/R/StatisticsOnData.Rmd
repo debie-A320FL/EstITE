@@ -19,7 +19,7 @@ data <- read.csv("./../Setup 1/Data/simulated_1M_data.csv")
 set.seed(123)
 
 data = data[sample(nrow(data)),]
-size_sample = 1000
+size_sample = 10000
 data = data[1:size_sample,]
 
 # Importer les hyperparamètres
@@ -60,6 +60,45 @@ print(list_q)
 ```
 
 ```{r}
+# Estimate the density
+density_estimate <- density(100*data$pi, kernel = "gaussian")
+
+data$pi %>% length()
+
+# Plot the density
+plot(density_estimate, main="Density Plot of Y", xlab="Y", ylab="Density")
+
+# Optionally, add a rug plot to show the individual data points
+rug(100*data$pi)
+```
+
+```{r}
+# Estimate the density
+density_estimate <- density(100*ITE_proba)
+
+# Plot the density
+plot(density_estimate, main="Density Plot of ITE", xlab="ITE", ylab="Density")
+
+# Optionally, add a rug plot to show the individual data points
+rug(ITE_proba)
+```
+
+```{r}
+bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(0.1))
+myY <- plogis(ITE + bruit_gaussien)
+
+# Estimate the density
+density_estimate <- density(100*myY, kernel = "gaussian")
+
+# Plot the density
+plot(density_estimate, main="Density Plot of Y", xlab="Y", ylab="Density")
+
+# Optionally, add a rug plot to show the individual data points
+rug(100*myY)
+```
+
+
+```{r}
 set.seed(123)
 print(hyperparams$sigma_sq)
 
@@ -77,6 +116,36 @@ for (fac in list_fac){
   print(list_q)
 }
 ```
+
+```{r}
+set.seed(123)
+print(hyperparams$sigma_sq)
+
+list_fac = list(0.1, 0.5, 1,2 ,3, 5)
+
+for (fac in list_fac){
+  print(fac)
+  # Observation de Y avec du bruit
+  bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(hyperparams$sigma_sq))
+  myY <- plogis(ITE + bruit_gaussien * fac)
+  
+  diff_Y = 100 * (myY - data$pi)
+  
+  # Estimate the density
+  density_estimate <- density(diff_Y, kernel = "gaussian")
+  
+  # Plot the density
+  plot(density_estimate,main = paste("Density Plot of diff Y (fac =", fac, ")"), xlab="diff Y", ylab="Density")
+  
+  # Optionally, add a rug plot to show the individual data points
+  rug(diff_Y)
+}
+```
+```{r}
+bruit_gaussien <- rnorm(1000, mean = 0, sd = 2)
+print(var(bruit_gaussien))
+```
+
 
 ```{r}
 S_logit_int <- function(data){

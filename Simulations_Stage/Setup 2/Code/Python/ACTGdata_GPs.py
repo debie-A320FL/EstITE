@@ -138,7 +138,7 @@ for i in range(2):
 ##### Simulation Study
 start = time.time()
 
-list_fac = [0,0.1,0.5,1]
+list_fac = [0, 0.1, 0.5, 1,2,3,5]
 
 for fac in list_fac:
     print(f"fac = {fac}")
@@ -151,7 +151,7 @@ for fac in list_fac:
         np.random.seed(100 + i)
 
         # Générer le vecteur de bruit gaussien
-        bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
+        bruit_gaussien = np.random.normal(0, np.sqrt(hyperparams['sigma_sq']), size_sample)
         #bruit_gaussien = 0
         #fac = 0
         data["Y_proba"] = logistic(ITE + bruit_gaussien * fac)
