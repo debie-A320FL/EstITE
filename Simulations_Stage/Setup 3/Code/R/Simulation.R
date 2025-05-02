@@ -269,7 +269,7 @@ system.time(
     bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(hyperparams$sigma_sq))
 
     # Appliquer la fonction logistique
-    fac = 3
+    # fac = 3
     myY <- plogis(ITE + bruit_gaussien * fac)
 
 
@@ -436,7 +436,7 @@ system.time(
     
     
     # #################### T-RF # Does not run atm
-    # TRF <- T_RF(train_augmX, z_train, y_train)
+    TRF <- T_RF(train_augmX, z_train, y_train)
     train_est = EstimateCate(TRF, train_augmX)
     test_est = EstimateCate(TRF, test_augmX)
 
@@ -911,14 +911,14 @@ if (!dir.exists(directory_path)) {
 invisible(
   sapply(names(Results), 
          function(x) write.csv(Results[[x]], 
-                               file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_fac_",fac, "_Nsize_",sample_size,".csv") ) )
+                               file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_fac_",fac, "_Nsize_",size_sample,".csv") ) )
 )
 
 
 write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
-          file = paste0(getwd(), "/Results/MeanSummary_", B, "_fac_",fac, "_Nsize_",sample_size,".csv"))
+          file = paste0(getwd(), "/Results/MeanSummary_", B, "_fac_",fac, "_Nsize_",size_sample,".csv"))
 
 write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
-          file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",sample_size, ".csv"))
+          file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
 
 }
