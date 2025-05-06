@@ -13,7 +13,7 @@ from scipy import stats as sts
 
 # Ajouter le chemin du dossier Python de Setup 1 à sys.path
 import sys
-setup_1_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../Setup 1/Code/Python'))
+setup_1_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../Setup 1a/Code/Python'))
 print(setup_1_models_path)
 sys.path.append(setup_1_models_path)
 
