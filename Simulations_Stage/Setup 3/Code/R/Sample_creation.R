@@ -110,25 +110,14 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
   }
 }
 
-data <- generate_data(n = 1000000)
-
-data %>% head()
+data <- generate_data(n = 10000, beta_0 = 0.4)
 
 
-data %>% summary()
-
-# Afficher le résumé des données pour les hommes (gender == 0)
-summary_males <- data %>% filter(gender == 0) %>% select(-gender) %>% summary()
-print(summary_males)
-
-# Afficher le résumé des données pour les femmes (gender == 0)
-summary_females <- data %>% filter(gender == 1) %>% select(-gender) %>% summary()
-print(summary_females)
-
-data %>%
-  filter(gender == 0) %>%
+prop <- data %>%
   summarise(proportion = mean(treatment == 1))
 
-export_data_to_csv(data, file_name = "simulated_1M_data.csv",
+print(prop)
+
+export_data_to_csv(data, file_name = "simulated_1M_data_unbalanced_set.csv",
                    directory = ".",
                    overwrite = FALSE)

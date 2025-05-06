@@ -90,11 +90,7 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
 
-list_fac <- c(2,3,5)
-for (fac in list_fac) {
-  print(paste("fac =", fac))
-
-data <- read.csv("./../Setup 1/Data/simulated_1M_data.csv")
+data <- read.csv("./../Setup 3/Data/simulated_1M_data_unbalanced_set.csv")
 
 data_b <- data
 
@@ -104,7 +100,7 @@ sample_size = 1000
 data = data[1:sample_size,]
 
 # Importer les hyperparamètres
-hyperparams <- read.csv("./../Setup 1/Data/hyperparams.csv")
+hyperparams <- read.csv("./../Setup 3/Data/hyperparams.csv")
 
 # Extraire les variables nécessaires
 myZ <- data$treatment
@@ -212,7 +208,7 @@ plot(sample_size, vec_MSE, log="xy")
 # Estimation --------------------------------------------------------------
 
 ### OPTIONS
-B = 80   # Num of Simulations
+B = 5   # Num of Simulations
 N = data %>% nrow()
 
 #### PScore Estimation
@@ -919,4 +915,4 @@ write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ),
 write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
           file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",sample_size, ".csv"))
 
-}
+
