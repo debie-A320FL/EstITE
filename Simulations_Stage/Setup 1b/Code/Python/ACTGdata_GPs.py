@@ -29,7 +29,7 @@ def r_loss(y, mu, z, pi, tau):
 B = 80  # Num of simulations
 
 # Load AIDS data
-basedir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Data"
+basedir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2a/Data"
 
 # The dataset is too large
 # Randomly sample 1000 rows from the DataFrame

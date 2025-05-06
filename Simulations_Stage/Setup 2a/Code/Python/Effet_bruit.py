@@ -11,7 +11,7 @@ from scipy import stats as sts
 # Ajouter le chemin du dossier Python de Setup 1 à sys.path
 import sys
 
-basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1/Data"
+basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
 size_sample = 1000

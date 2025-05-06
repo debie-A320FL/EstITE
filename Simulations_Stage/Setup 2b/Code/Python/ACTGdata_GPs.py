@@ -13,7 +13,7 @@ from scipy import stats as sts
 
 # Ajouter le chemin du dossier Python de Setup 1 à sys.path
 import sys
-setup_1_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../Setup 1/Code/Python'))
+setup_1_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../Setup 1a/Code/Python'))
 print(setup_1_models_path)
 sys.path.append(setup_1_models_path)
 
@@ -43,7 +43,7 @@ B = 80  # Num of simulations
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 # Utilisation des données de setup 1
-basedir_setup_3 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 3/Data"
+basedir_setup_3 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2b/Data"
 data = pd.read_csv(basedir_setup_3 + "/simulated_data_null_CATE.csv")
 
 # The dataset is too large
@@ -54,7 +54,7 @@ data = data.sample(n=size_sample, random_state=1)  # You can set a random_state 
 
 # To save result
 # Define the full path
-results_dir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 3/Results"
+results_dir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2b/Results"
 # Create the directory if it doesn't exist
 os.makedirs(results_dir, exist_ok=True)
 

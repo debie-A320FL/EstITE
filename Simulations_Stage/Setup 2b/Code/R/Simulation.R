@@ -94,18 +94,18 @@ list_fac <- c(0,0.1,0.5,1,2,3,5)
 for (fac in list_fac) {
   print(paste("fac =", fac))
 
-data <- read.csv("./../Setup 3/Data/simulated_data_null_CATE.csv")
+data <- read.csv("./../Setup 2b/Data/simulated_data_null_CATE.csv")
 
 data_b <- data
 
 set.seed(123)
 
 data = data[sample(nrow(data)),]
-size_sample = 1000
+size_sample = 500
 data = data[1:size_sample,]
 
 # Importer les hyperparamètres
-hyperparams <- read.csv("./../Setup 3/Data/hyperparams.csv")
+hyperparams <- read.csv("./../Setup 2b/Data/hyperparams.csv")
 
 # Extraire les variables nécessaires
 myZ <- data$treatment
@@ -215,7 +215,7 @@ plot(sample_size, vec_MSE, log="xy")
 # Estimation --------------------------------------------------------------
 
 ### OPTIONS
-B = 80   # Num of Simulations
+B = 3   # Num of Simulations
 N = data %>% nrow()
 
 #### PScore Estimation
@@ -258,10 +258,14 @@ system.time(
   for (i in 1:B) {
     
     
+    # sink()  # Reset to default
+    
     gc()
     
     cat("\n\n\n\n-------- Iteration", i, "--------\n\n\n\n")
     
+
+    # sink("NUL")      # Disable printing
     
     if(i<=500){set.seed(502 + i*5)}
     if(i>500){set.seed(7502 + i*5)}
@@ -887,6 +891,8 @@ system.time(
     
     # Remove garbage
     rm(mybcf)
+    
+    
     
     
   }

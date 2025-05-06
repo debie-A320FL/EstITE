@@ -94,7 +94,7 @@ list_fac <- c(2,3,5)
 for (fac in list_fac) {
   print(paste("fac =", fac))
 
-data <- read.csv("./../Setup 1/Data/simulated_1M_data.csv")
+data <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 
 data_b <- data
 
@@ -104,7 +104,7 @@ sample_size = 1000
 data = data[1:sample_size,]
 
 # Importer les hyperparamètres
-hyperparams <- read.csv("./../Setup 1/Data/hyperparams.csv")
+hyperparams <- read.csv("./../Setup 1a/Data/hyperparams.csv")
 
 # Extraire les variables nécessaires
 myZ <- data$treatment

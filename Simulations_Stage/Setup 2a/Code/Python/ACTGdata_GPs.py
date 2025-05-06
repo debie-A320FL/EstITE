@@ -43,7 +43,7 @@ B = 80  # Num of simulations
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 # Utilisation des données de setup 1
-basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1/Data"
+basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
 # The dataset is too large
@@ -54,7 +54,7 @@ data = data.sample(n=size_sample, random_state=1)  # You can set a random_state 
 
 # To save result
 # Define the full path
-basedir_setup_2 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2/"
+basedir_setup_2 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2a/"
 results_dir = os.path.join(basedir_setup_2, "Results")
 # Create the directory if it doesn't exist
 os.makedirs(results_dir, exist_ok=True)

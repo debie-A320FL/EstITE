@@ -14,7 +14,7 @@ library(dplyr)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
 
-data <- read.csv("./../Setup 1/Data/simulated_1M_data.csv")
+data <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 
 set.seed(123)
 
@@ -23,7 +23,7 @@ size_sample = 10000
 data = data[1:size_sample,]
 
 # Importer les hyperparamètres
-hyperparams <- read.csv("./../Setup 1/Data/hyperparams.csv")
+hyperparams <- read.csv("./../Setup 1a/Data/hyperparams.csv")
 ```
 
 
@@ -168,7 +168,7 @@ summary(res_S_int)
 ```{r}
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
-data <- read.csv("./../Setup 1/Data/simulated_1M_data.csv")
+data <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 
 MSE_100 <- function(x, y) sqrt(mean((100*x - 100*y)^2))
 
