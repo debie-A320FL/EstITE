@@ -110,7 +110,7 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
   }
 }
 
-data <- generate_data(n = 10000, beta_0 = 0.4)
+data <- generate_data(n = 10000, beta_0 = -2.5)
 
 
 prop <- data %>%
@@ -120,4 +120,4 @@ print(prop)
 
 export_data_to_csv(data, file_name = "simulated_1M_data_unbalanced_set.csv",
                    directory = ".",
-                   overwrite = FALSE)
+                   overwrite = TRUE)
