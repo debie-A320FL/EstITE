@@ -38,112 +38,114 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 80  # Num of simulations
+B = 3  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 # Utilisation des données de setup 1
-basedir_setup_3 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2b/Data"
-data = pd.read_csv(basedir_setup_3 + "/simulated_data_null_CATE.csv")
+basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
-# The dataset is too large
-# Randomly sample 1000 rows from the DataFrame
-size_sample = 1000
-data = data.sample(n=size_sample, random_state=1)  # You can set a random_state for reproducibility
-#AIDS = "/home/onyxia/work/EstITE/Simulations/ACTG/Data/ACTGData.csv"
+N_size = [500,1000,5000,10000,50000]
 
-# To save result
-# Define the full path
-results_dir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2b/Results"
-# Create the directory if it doesn't exist
-os.makedirs(results_dir, exist_ok=True)
+for N in N_size:
+    print(f"N = {N}")
+    data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
-# Define treatment assignment
-myZ = np.array(data["treatment"])
-# Define response
-# myY = np.array(data["Y"])
-# Convert X to array
-myX = np.array(data.drop(columns=["treatment", "Y"]))
+    # The dataset is too large
+    # Randomly sample 1000 rows from the DataFrame
+    size_sample = N
+    data = data.sample(n=size_sample, random_state=1)  # You can set a random_state for reproducibility
+    #AIDS = "/home/onyxia/work/EstITE/Simulations/ACTG/Data/ACTGData.csv"
 
-# Scale numeric
-# to_scale = ["age", "wtkg", "preanti"]
-# AIDS[to_scale] = preprocessing.scale(AIDS[to_scale])
+    # To save result
+    # Define the full path
+    results_dir = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Results"
+    # Create the directory if it doesn't exist
+    os.makedirs(results_dir, exist_ok=True)
 
-# Pred and obs
-N, P = data.drop(columns=["treatment","Y"]).shape
+    # Define treatment assignment
+    myZ = np.array(data["treatment"])
+    # Define response
+    # myY = np.array(data["Y"])
+    # Convert X to array
+    myX = np.array(data.drop(columns=["treatment", "Y"]))
 
-# Importer les hyperparamètres
-hyperparams = pd.read_csv(basedir_setup_3 + "/hyperparams.csv")
+    # Scale numeric
+    # to_scale = ["age", "wtkg", "preanti"]
+    # AIDS[to_scale] = preprocessing.scale(AIDS[to_scale])
 
-# Obtenir les indices des colonnes par leurs noms
-column_names = ["age", "weight", "comorbidities", "gender"]
-column_indices = [data.columns.get_loc(col) for col in column_names]
+    # Pred and obs
+    N, P = data.drop(columns=["treatment","Y"]).shape
 
-# Calculer mu_0, tau, et ITE
-mu_0 = (hyperparams['gamma_0'].values[0] * np.ones(myX.shape[0]) +
-        hyperparams['gamma_1'].values[0] * myX[:, column_indices[0]] +  # age
-        hyperparams['gamma_2'].values[0] * myX[:, column_indices[1]] +  # weight
-        hyperparams['gamma_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
-        hyperparams['gamma_4'].values[0] * myX[:, column_indices[3]])   # gender
+    # Importer les hyperparamètres
+    hyperparams = pd.read_csv(basedir_setup_1 + "/hyperparams.csv")
 
-tau = (hyperparams['delta_0'].values[0] * np.ones(myX.shape[0]) +
-       hyperparams['delta_1'].values[0] * myX[:, column_indices[0]] +  # age
-       hyperparams['delta_2'].values[0] * myX[:, column_indices[1]] +  # weight
-       hyperparams['delta_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
-       hyperparams['delta_4'].values[0] * myX[:, column_indices[3]])   # gender
+    # Obtenir les indices des colonnes par leurs noms
+    column_names = ["age", "weight", "comorbidities", "gender"]
+    column_indices = [data.columns.get_loc(col) for col in column_names]
 
-ITE = mu_0 + tau * myZ
+    # Calculer mu_0, tau, et ITE
+    mu_0 = (hyperparams['gamma_0'].values[0] * np.ones(myX.shape[0]) +
+            hyperparams['gamma_1'].values[0] * myX[:, column_indices[0]] +  # age
+            hyperparams['gamma_2'].values[0] * myX[:, column_indices[1]] +  # weight
+            hyperparams['gamma_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
+            hyperparams['gamma_4'].values[0] * myX[:, column_indices[3]])   # gender
 
-print(f"tau (min,max) : {(min(tau), max(tau))}")
+    tau = (hyperparams['delta_0'].values[0] * np.ones(myX.shape[0]) +
+        hyperparams['delta_1'].values[0] * myX[:, column_indices[0]] +  # age
+        hyperparams['delta_2'].values[0] * myX[:, column_indices[1]] +  # weight
+        hyperparams['delta_3'].values[0] * myX[:, column_indices[2]] +  # comorbidities
+        hyperparams['delta_4'].values[0] * myX[:, column_indices[3]])   # gender
 
-# Générer le vecteur de bruit gaussien
-# bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
+    ITE = mu_0 + tau * myZ
 
-# Fonction logistique (logit inverse)
-def logistic(x):
-    return 1 / (1 + np.exp(-x))
+    #print(f"tau (min,max) : {(min(tau), max(tau))}")
 
-# data["Y_proba"] = logistic(ITE + bruit_gaussien)
+    # Générer le vecteur de bruit gaussien
+    # bruit_gaussien = np.random.normal(0, hyperparams['sigma_sq'], size_sample)
 
-# myY = np.array(data["Y_proba"])
+    # Fonction logistique (logit inverse)
+    def logistic(x):
+        return 1 / (1 + np.exp(-x))
 
-# Convertir en DataFrame pandas
-# df = pd.DataFrame(data, columns=["Y_proba"])
+    # data["Y_proba"] = logistic(ITE + bruit_gaussien)
 
-# Utiliser describe pour obtenir les statistiques
-# summary = df.describe()
+    # myY = np.array(data["Y_proba"])
 
-# Afficher le résumé
-# print(summary)
+    # Convertir en DataFrame pandas
+    # df = pd.DataFrame(data, columns=["Y_proba"])
 
+    # Utiliser describe pour obtenir les statistiques
+    # summary = df.describe()
 
-
-# Ajouter une colonne pi pour la probabilité théorique
-# data['pi'] = 1 / (1 + np.exp(-(mu_0 + tau * myZ)))
-
-# Calculer ITE_proba
-ITE_proba = 1 / (1 + np.exp(-(mu_0 + tau))) - 1 / (1 + np.exp(-mu_0)) #todo utiliser logistic ?
+    # Afficher le résumé
+    # print(summary)
 
 
-# Results storage
-# esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE', 'RLOSS']
-esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE'] # RLOSS not stored atm
 
-Results = {}
-for i in range(2):
-    for k in range(2):
-        for j in loss:
-            dest = {'%s_%s_%s' % (esti[i], subs[k], j): np.zeros((B, 3))}
-            Results.update(dest)
+    # Ajouter une colonne pi pour la probabilité théorique
+    # data['pi'] = 1 / (1 + np.exp(-(mu_0 + tau * myZ)))
+
+    # Calculer ITE_proba
+    ITE_proba = 1 / (1 + np.exp(-(mu_0 + tau))) - 1 / (1 + np.exp(-mu_0)) #todo utiliser logistic ?
 
 
-##### Simulation Study
-start = time.time()
+    # Results storage
+    # esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE', 'RLOSS']
+    esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE'] # RLOSS not stored atm
 
-list_fac = [0, 0.1, 0.5, 1,2,3,5]
+    Results = {}
+    for i in range(2):
+        for k in range(2):
+            for j in loss:
+                dest = {'%s_%s_%s' % (esti[i], subs[k], j): np.zeros((B, 3))}
+                Results.update(dest)
 
-for fac in list_fac:
-    print(f"fac = {fac}")
+    Time = np.zeros((B, 3))
+
+    ##### Simulation Study
+    start = time.time()
+
 
     for i in range(B):
 
@@ -155,7 +157,7 @@ for fac in list_fac:
         # Générer le vecteur de bruit gaussien
         bruit_gaussien = np.random.normal(0, np.sqrt(hyperparams['sigma_sq']), size_sample)
         #bruit_gaussien = 0
-        # fac = 1
+        fac = 1
         data["Y_proba"] = logistic(ITE + bruit_gaussien * fac)
 
         myY = np.array(data["Y_proba"])
@@ -179,14 +181,16 @@ for fac in list_fac:
         CATT_Test = ITE_test[z_test == 1]; CATC_Test = ITE_test[z_test == 0]
 
         # 1) CMGP
-        # print("CMGP")
+        start_time = time.time()
         myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
-        #print("before fit")
         myCMGP.fit(X=x_train, Y=y_train, W=z_train)
-        #print("after fit")
 
         train_CMGP_est = myCMGP.predict(x_train)[0]
         test_CMGP_est = myCMGP.predict(x_test)[0]
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        Time[i,0] = execution_time
 
         # CATT
         Results['CATT_Train_Bias'][i, 0] = bias(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
@@ -204,11 +208,16 @@ for fac in list_fac:
         
         
         # 2) NSGP
+        start_time = time.time()
         myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern')
         myNSGP.fit(X=x_train, Y=y_train, W=z_train)
 
         train_NSGP_est = myNSGP.predict(x_train)[0]
         test_NSGP_est = myNSGP.predict(x_test)[0]
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        Time[i,1] = execution_time
 
         # CATT
         Results['CATT_Train_Bias'][i, 1] = bias(CATT_Train, train_NSGP_est.reshape(-1)[z_train == 1])
@@ -242,6 +251,7 @@ for fac in list_fac:
         y_train_patsy, X_train_patsy = patsy.dmatrices(formula, df_train, return_type='dataframe')
         y_test_patsy, X_test_patsy = patsy.dmatrices(formula, df_test, return_type='dataframe')
 
+        start_time = time.time()
         # Fit logistic regression model
         logit_model = sm.Logit(y_train_patsy, X_train_patsy)
         logit_result = logit_model.fit()
@@ -273,6 +283,10 @@ for fac in list_fac:
         train_logit_est = train_logit_est_t1 - train_logit_est_t0
         test_logit_est = test_logit_est_t1 - test_logit_est_t0
 
+        end_time = time.time()
+        execution_time = end_time - start_time
+        Time[i,1] = execution_time
+
         # CATT
         Results['CATT_Train_Bias'][i, 2] = bias(CATT_Train, train_logit_est[z_train == 1])
         Results['CATT_Train_PEHE'][i, 2] = PEHE(CATT_Train, train_logit_est[z_train == 1])
@@ -293,6 +307,15 @@ for fac in list_fac:
 
     models = ['CMGP', 'NSGP', 'Logistic']
     summary = {}
+
+    # Convert to DataFrame
+    df = pd.DataFrame(Time, columns=models)
+
+    # Export to CSV
+    df.to_csv(os.path.join(results_dir,f'Time_Nsize_{N}.csv'), index=False)
+    
+    print("Mean execution Time:")
+    print(df.mean())
 
     for name in Results.keys():
         PD_results = pd.DataFrame(Results[name], columns=models)
