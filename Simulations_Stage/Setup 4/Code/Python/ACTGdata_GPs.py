@@ -14,7 +14,7 @@ from scipy import stats as sts
 # Ajouter le chemin du dossier Python de Setup 1 à sys.path
 import sys
 setup_1_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../Setup 1a/Code/Python'))
-print(setup_1_models_path)
+# print(setup_1_models_path)
 sys.path.append(setup_1_models_path)
 
 from models.causal_models import CMGP
@@ -45,7 +45,7 @@ B = 3  # Num of simulations
 # Utilisation des données de setup 1
 basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
-N_size = [500,1000,5000,10000,50000]
+N_size = [500,1000,5000,10000,50000, 100000,500000,1000000]
 
 for N in N_size:
     print(f"N = {N}")
@@ -181,7 +181,7 @@ for N in N_size:
         CATT_Test = ITE_test[z_test == 1]; CATC_Test = ITE_test[z_test == 0]
 
         # 1) CMGP
-        start_time = time.time()
+        """ start_time = time.time()
         myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
         myCMGP.fit(X=x_train, Y=y_train, W=z_train)
 
@@ -206,7 +206,7 @@ for N in N_size:
         Results['CATC_Test_Bias'][i, 0] = bias(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
         Results['CATC_Test_PEHE'][i, 0] = PEHE(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
         
-        
+         """
         # 2) NSGP
         start_time = time.time()
         myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern')
@@ -312,7 +312,7 @@ for N in N_size:
     df = pd.DataFrame(Time, columns=models)
 
     # Export to CSV
-    df.to_csv(os.path.join(results_dir,f'Time_Nsize_{N}.csv'), index=False)
+    df.to_csv(os.path.join(results_dir,f'Time_Nsize_{N}_B_{B}.csv'), index=False)
     
     print("Mean execution Time:")
     print(df.mean())
@@ -321,9 +321,9 @@ for N in N_size:
         PD_results = pd.DataFrame(Results[name], columns=models)
         PD_results.to_csv(os.path.join(results_dir, "GP_%s_%s_Nsize_%s_fac_%s.csv" % (B, name, N, fac)), index=False, header=True)
 
-        aux = {name: {'CMGP': np.c_[np.mean(PD_results['CMGP']), MC_se(PD_results['CMGP'], B)],
-                    'NSGP': np.c_[np.mean(PD_results['NSGP']), MC_se(PD_results['NSGP'], B)],
-                    'Logistic': np.c_[np.mean(PD_results['Logistic']), MC_se(PD_results['Logistic'], B)]}}
+        aux = {name: {'CMGP': np.c_[round(np.mean(PD_results['CMGP']),4), round(MC_se(PD_results['CMGP'], B),4)],
+                    'NSGP': np.c_[round(np.mean(PD_results['NSGP']),4), round(MC_se(PD_results['NSGP'], B),4)],
+                    'Logistic': np.c_[round(np.mean(PD_results['Logistic']),4), round(MC_se(PD_results['Logistic'], B),4)]}}
         summary.update(aux)
 
     print(pd.DataFrame(summary).T)
