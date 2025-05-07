@@ -208,7 +208,7 @@ plot(sample_size, vec_MSE, log="xy")
 # Estimation --------------------------------------------------------------
 
 ### OPTIONS
-B = 5   # Num of Simulations
+B = 80   # Num of Simulations
 N = data %>% nrow()
 
 #### PScore Estimation
