@@ -15,7 +15,7 @@ from scipy import stats as sts
 import sys
 setup_1_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../Setup 1a/Code/Python'))
 # print(setup_1_models_path)
-sys.path.append(setup_1_models_path)
+# sys.path.append(setup_1_models_path)
 
 from models.causal_models import CMGP
 
@@ -38,7 +38,7 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 3  # Num of simulations
+B = 1  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
@@ -47,7 +47,7 @@ basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
 N_size = [500,1000,5000,10000,50000, 100000,500000,1000000]
 
-for N in N_size:
+for N in N_size[:]:
     print(f"N = {N}")
     data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
@@ -209,7 +209,7 @@ for N in N_size:
          """
         # 2) NSGP
         start_time = time.time()
-        myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern')
+        myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern', backend="gpy")
         myNSGP.fit(X=x_train, Y=y_train, W=z_train)
 
         train_NSGP_est = myNSGP.predict(x_train)[0]
