@@ -90,8 +90,10 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
 
-list_size <- c(500,1000,5000, 10000, 50000, 100000)
+#list_size <- c(500,1000,5000, 10000)
+list_size <- c(500)
 for (size_sample in list_size) {
+  sink()
   print(paste("size_sample =", size_sample))
 
 data <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
@@ -124,7 +126,7 @@ ITE_proba <- 1 / (1 + exp(-(mu_0 + tau))) - 1 / (1 + exp(-mu_0))
 # Estimation --------------------------------------------------------------
 
 ### OPTIONS
-B = 3   # Num of Simulations
+B = 2   # Num of Simulations
 N = data %>% nrow()
 
 #### PScore Estimation
@@ -167,14 +169,14 @@ system.time(
   for (i in 1:B) {
     
     
-    # sink()  # Reset to default
+    sink()  # Reset to default
     
     gc()
     
-    cat("\n\n\n\n-------- Iteration", i, "--------\n\n\n\n")
+    cat("\n-------- Iteration", i, "--------\n")
     
 
-    # sink("NUL")      # Disable printing
+    sink("nul")     # Disable printing
     
     if(i<=500){set.seed(502 + i*5)}
     if(i>500){set.seed(7502 + i*5)}
@@ -242,6 +244,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'S-RF'] = execution_time
+
+    sink()
+    print(paste0("S-RF_execution_time : ", execution_time))
+    sink("nul")
 
     # CATT
     Results$CATT_Train_Bias[i, 'S-RF'] = bias(Train_CATT, train_est[z_train == 1])
@@ -322,6 +328,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'S-BART'] = execution_time
+
+    sink()
+    print(paste0("S-BART_execution_time : ", execution_time))
+    sink("nul")
     
     
     # CATT
@@ -363,6 +373,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'T-RF'] = execution_time
+
+    sink()
+    print(paste0("T-RF_execution_time : ", execution_time))
+    sink("nul")
 
     # CATT
     Results$CATT_Train_Bias[i, 'T-RF'] = bias(Train_CATT, train_est[z_train == 1])
@@ -486,6 +500,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'T-BART'] = execution_time
+
+    sink()
+    print(paste0("T-BART_execution_time : ", execution_time))
+    sink("nul")
     
     
     # CATT
@@ -526,6 +544,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'X-RF'] = execution_time
+
+    sink()
+    print(paste0("X-RF_execution_time : ", execution_time))
+    sink("nul")
 
     # CATT
     Results$CATT_Train_Bias[i, 'X-RF'] = bias(Train_CATT, train_est[z_train == 1])
@@ -611,6 +633,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'X-BART'] = execution_time + execution_time_T_shared_with_X
+
+    sink()
+    print(paste0("X-BART_execution_time : ", execution_time + execution_time_T_shared_with_X))
+    sink("nul")
     
     
     # CATT
@@ -653,6 +679,11 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'R-LASSO'] = execution_time
+
+    sink()
+    print(paste0("R-LASSO_execution_time : ", execution_time))
+    sink("nul")
+    
     
     # CATT
     Results$CATT_Train_Bias[i, 'R-LASSO'] = bias(Train_CATT, train_est[z_train == 1])
@@ -694,6 +725,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'R-BOOST'] = execution_time
+
+    sink()
+    print(paste0("R-BOOST_execution_time : ", execution_time))
+    sink("nul")
     
     # CATT
     Results$CATT_Train_Bias[i, 'R-BOOST'] = bias(Train_CATT, train_est[z_train == 1])
@@ -734,6 +769,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'CF'] = execution_time
+
+    sink()
+    print(paste0("CF_execution_time : ", execution_time))
+    sink("nul")
     
     
     # CATT
@@ -789,6 +828,10 @@ system.time(
     end_time <- Sys.time()
     execution_time <- end_time - start_time
     Liste_time$execution_time[i, 'BCF'] = execution_time
+
+    sink()
+    print(paste0("BCF_execution_time : ", execution_time))
+    # sink("nul")
     
     
     # CATT
@@ -824,17 +867,21 @@ system.time(
   
 )
 
-# sapply( names(Results), function(x) colMeans(Results[[x]]) )
-# sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) )
-
-print("Sample_size")
+print("\nSample_size\n")
 print(size_sample)
+
+print("\nMean_results\n")
+print(sapply( names(Results), function(x) colMeans(Results[[x]]) ))
+#sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) )
+
+print("\nTime")
+print(Liste_time$execution_time)
 
 print("\nMean_time\n")
 print(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ))
 
-print("\nSD_time\n")
-sapply( names(Liste_time), function(x) apply(Liste_time[[x]], 2, function(y) MC_se(y, B)) )
+#print("\nSD_time\n")
+#print(sapply( names(Liste_time), function(x) apply(Liste_time[[x]], 2, function(y) MC_se(y, B)) ))
 
 
 # Save Results --------------------------------------------------
@@ -845,21 +892,23 @@ if (!dir.exists(directory_path)) {
   dir.create(directory_path, recursive = TRUE)
 }
 
-# invisible(
-#   sapply(names(Results), 
-#          function(x) write.csv(Results[[x]], 
-#                                file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_fac_",fac, "_Nsize_",size_sample,".csv") ) )
-# )
+ invisible(
+   sapply(names(Results), 
+          function(x) write.csv(Results[[x]], 
+                                file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_fac_",fac, "_Nsize_",size_sample,".csv") ) )
+ )
 
 
-# write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
-#           file = paste0(getwd(), "/Results/MeanSummary_", B, "_fac_",fac, "_Nsize_",size_sample,".csv"))
-# 
-# write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
-#           file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
+ write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
+           file = paste0(getwd(), "/Results/MeanSummary_", B, "_fac_",fac, "_Nsize_",size_sample,".csv"))
+ 
+ write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
+           file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
 
-write.csv(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ), 
-          file = paste0(getwd(), "/Results/Execution time_R_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
+ write.csv(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ), 
+          file = paste0(getwd(), "/Results/Mean_Execution time_R_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
+
+ write.csv(Liste_time$execution_time, file = paste0(getwd(), "/Results/Execution time_R_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
 
 
 }
