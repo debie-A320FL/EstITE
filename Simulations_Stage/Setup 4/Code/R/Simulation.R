@@ -90,7 +90,7 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
 
-list_size <- c(500,1000,5000, 10000, 50000, 100000)
+list_size <- c(500,1000,5000, 10000)
 for (size_sample in list_size) {
   print(paste("size_sample =", size_sample))
 
@@ -824,17 +824,18 @@ system.time(
   
 )
 
-# sapply( names(Results), function(x) colMeans(Results[[x]]) )
-# sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) )
-
-print("Sample_size")
+print("\nSample_size\n")
 print(size_sample)
+
+print("\nMean_results\n")
+print(sapply( names(Results), function(x) colMeans(Results[[x]]) ))
+#sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) )
 
 print("\nMean_time\n")
 print(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ))
 
-print("\nSD_time\n")
-sapply( names(Liste_time), function(x) apply(Liste_time[[x]], 2, function(y) MC_se(y, B)) )
+#print("\nSD_time\n")
+#print(sapply( names(Liste_time), function(x) apply(Liste_time[[x]], 2, function(y) MC_se(y, B)) ))
 
 
 # Save Results --------------------------------------------------
@@ -845,18 +846,18 @@ if (!dir.exists(directory_path)) {
   dir.create(directory_path, recursive = TRUE)
 }
 
-# invisible(
-#   sapply(names(Results), 
-#          function(x) write.csv(Results[[x]], 
-#                                file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_fac_",fac, "_Nsize_",size_sample,".csv") ) )
-# )
+ invisible(
+   sapply(names(Results), 
+          function(x) write.csv(Results[[x]], 
+                                file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_fac_",fac, "_Nsize_",size_sample,".csv") ) )
+ )
 
 
-# write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
-#           file = paste0(getwd(), "/Results/MeanSummary_", B, "_fac_",fac, "_Nsize_",size_sample,".csv"))
-# 
-# write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
-#           file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
+ write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
+           file = paste0(getwd(), "/Results/MeanSummary_", B, "_fac_",fac, "_Nsize_",size_sample,".csv"))
+ 
+ write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
+           file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
 
 write.csv(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ), 
           file = paste0(getwd(), "/Results/Execution time_R_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
