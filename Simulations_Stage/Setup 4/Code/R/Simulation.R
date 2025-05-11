@@ -90,8 +90,7 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 setwd(curr_dir); setwd('./../../')
 
-#list_size <- c(500,1000,5000, 10000)
-list_size <- c(500)
+list_size <- c(500,1000,5000, 10000)
 for (size_sample in list_size) {
   sink()
   print(paste("size_sample =", size_sample))
@@ -873,9 +872,6 @@ print(size_sample)
 print("\nMean_results\n")
 print(sapply( names(Results), function(x) colMeans(Results[[x]]) ))
 #sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) )
-
-print("\nTime")
-print(Liste_time$execution_time)
 
 print("\nMean_time\n")
 print(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ))

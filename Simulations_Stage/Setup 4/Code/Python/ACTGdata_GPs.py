@@ -38,16 +38,16 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 1  # Num of simulations
+B = 3  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 # Utilisation des données de setup 1
 basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
-N_size = [500,1000,5000,10000,50000, 100000,500000,1000000]
+N_size = [500,1000,5000,10000]
 
-for N in N_size[:]:
+for N in N_size:
     print(f"N = {N}")
     data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
@@ -144,7 +144,7 @@ for N in N_size[:]:
     Time = np.zeros((B, 3))
 
     ##### Simulation Study
-    start = time.time()
+    # start = time.time()
 
 
     for i in range(B):
@@ -181,8 +181,9 @@ for N in N_size[:]:
         CATT_Test = ITE_test[z_test == 1]; CATC_Test = ITE_test[z_test == 0]
 
         # 1) CMGP
-        """ start_time = time.time()
-        myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
+        
+        start_time = time.time()
+        myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF', backend="gpy")
         myCMGP.fit(X=x_train, Y=y_train, W=z_train)
 
         train_CMGP_est = myCMGP.predict(x_train)[0]
@@ -191,6 +192,7 @@ for N in N_size[:]:
         end_time = time.time()
         execution_time = end_time - start_time
         Time[i,0] = execution_time
+        print(f"\nCMGP_predict_time : {execution_time}")
 
         # CATT
         Results['CATT_Train_Bias'][i, 0] = bias(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
@@ -205,8 +207,12 @@ for N in N_size[:]:
 
         Results['CATC_Test_Bias'][i, 0] = bias(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
         Results['CATC_Test_PEHE'][i, 0] = PEHE(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
+
+        end_time = time.time()
+        execution_time = end_time - start_time
+        #print(f"CMGP_predic_and_biais_pehe_time : {execution_time}")
         
-         """
+        
         # 2) NSGP
         start_time = time.time()
         myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern', backend="gpy")
@@ -217,6 +223,7 @@ for N in N_size[:]:
 
         end_time = time.time()
         execution_time = end_time - start_time
+        print(f"NSGP_predict_time : {execution_time}")
         Time[i,1] = execution_time
 
         # CATT
@@ -233,9 +240,15 @@ for N in N_size[:]:
         Results['CATC_Test_Bias'][i, 1] = bias(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
         Results['CATC_Test_PEHE'][i, 1] = PEHE(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
 
+        end_time = time.time()
+        execution_time = end_time - start_time
+        #print(f"NSGP_predic_and_biais_pehe_time : {execution_time}")
 
         # 3) Logistic Regression with Interaction Terms using patsy
         # Create DataFrames for train and test sets
+
+        start_time = time.time()
+
         df_train = pd.DataFrame(x_train, columns=column_names)
         df_train['treatment'] = z_train
         df_train['y'] = y_train
@@ -251,10 +264,14 @@ for N in N_size[:]:
         y_train_patsy, X_train_patsy = patsy.dmatrices(formula, df_train, return_type='dataframe')
         y_test_patsy, X_test_patsy = patsy.dmatrices(formula, df_test, return_type='dataframe')
 
-        start_time = time.time()
+        end_time = time.time()
+        execution_time = end_time - start_time
+        #print(f"\nlogit_preparation_time : {execution_time}")
+
+        # start_time = time.time()
         # Fit logistic regression model
         logit_model = sm.Logit(y_train_patsy, X_train_patsy)
-        logit_result = logit_model.fit()
+        logit_result = logit_model.fit(disp=0)
 
         # Create copies of the DataFrames with treatment set to 1 and 0
         df_train_t1 = df_train.copy()
@@ -285,7 +302,8 @@ for N in N_size[:]:
 
         end_time = time.time()
         execution_time = end_time - start_time
-        Time[i,1] = execution_time
+        Time[i,2] = execution_time
+        print(f"logit_predict_time : {execution_time}")
 
         # CATT
         Results['CATT_Train_Bias'][i, 2] = bias(CATT_Train, train_logit_est[z_train == 1])
@@ -301,24 +319,35 @@ for N in N_size[:]:
         Results['CATC_Test_Bias'][i, 2] = bias(CATC_Test, test_logit_est[z_test == 0])
         Results['CATC_Test_PEHE'][i, 2] = PEHE(CATC_Test, test_logit_est[z_test == 0])
 
+        end_time = time.time()
+        execution_time = end_time - start_time
+        #print(f"logit_predic_and_biais_pehe_time : {execution_time}")
 
-    elapsed = time.time() - start
-    print("\n\nElapsed time (in h) is", round(elapsed/3600, 2)) # 2h for B=100
+
+    # elapsed = time.time() - start
+    # print("\n\nElapsed time (in h) is", round(elapsed/3600, 2)) # 2h for B=100
 
     models = ['CMGP', 'NSGP', 'Logistic']
     summary = {}
 
+    # print(Time)
+
     # Convert to DataFrame
     df = pd.DataFrame(Time, columns=models)
+    # print(df)
+
 
     # Export to CSV
+    
     df.to_csv(os.path.join(results_dir,f'Time_Nsize_{N}_B_{B}.csv'), index=False)
+    
     
     print("Mean execution Time:")
     print(df.mean())
 
     for name in Results.keys():
         PD_results = pd.DataFrame(Results[name], columns=models)
+        
         PD_results.to_csv(os.path.join(results_dir, "GP_%s_%s_Nsize_%s_fac_%s.csv" % (B, name, N, fac)), index=False, header=True)
 
         aux = {name: {'CMGP': np.c_[round(np.mean(PD_results['CMGP']),4), round(MC_se(PD_results['CMGP'], B),4)],
