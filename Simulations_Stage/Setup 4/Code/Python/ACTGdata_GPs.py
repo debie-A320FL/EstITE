@@ -38,16 +38,16 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 1  # Num of simulations
+B = 3  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 # Utilisation des données de setup 1
 basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
-N_size = [500,1000,5000,10000,50000, 100000,500000,1000000]
+N_size = [500,1000,5000,10000]
 
-for N in N_size[:]:
+for N in N_size:
     print(f"N = {N}")
     data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
@@ -181,8 +181,8 @@ for N in N_size[:]:
         CATT_Test = ITE_test[z_test == 1]; CATC_Test = ITE_test[z_test == 0]
 
         # 1) CMGP
-        """ start_time = time.time()
-        myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
+        start_time = time.time()
+        myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF', backend="gpy")
         myCMGP.fit(X=x_train, Y=y_train, W=z_train)
 
         train_CMGP_est = myCMGP.predict(x_train)[0]
@@ -206,7 +206,7 @@ for N in N_size[:]:
         Results['CATC_Test_Bias'][i, 0] = bias(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
         Results['CATC_Test_PEHE'][i, 0] = PEHE(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
         
-         """
+        
         # 2) NSGP
         start_time = time.time()
         myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern', backend="gpy")
