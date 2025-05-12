@@ -125,7 +125,7 @@ ITE_proba <- 1 / (1 + exp(-(mu_0 + tau))) - 1 / (1 + exp(-mu_0))
 # Estimation --------------------------------------------------------------
 
 ### OPTIONS
-B = 2   # Num of Simulations
+B = 3   # Num of Simulations
 N = data %>% nrow()
 
 #### PScore Estimation
