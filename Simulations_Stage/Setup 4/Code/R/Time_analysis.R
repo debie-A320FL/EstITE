@@ -29,8 +29,8 @@ create_plots <- function(sample_sizes) {
     time_data[[as.character(size)]] <- res$Time
   }
 
-    print("pehe_data")
-  print(pehe_data)
+    #print("pehe_data")
+  #print(pehe_data)
 
   # Calculate median for PEHE_Test
   pehe_medians <- sapply(pehe_data, function(df) {
@@ -51,8 +51,8 @@ create_plots <- function(sample_sizes) {
   #print("pehe_medians")
   #print(pehe_medians)
 
-  print("time_medians")
-  print(time_medians)
+  #print("time_medians")
+  #print(time_medians)
 
   # Debugging: Print dimensions and column names
   #cat("Dimensions of pehe_medians:", dim(pehe_medians), "\n")
@@ -77,8 +77,8 @@ create_plots <- function(sample_sizes) {
   #cat("pehe_df:\n")
   #print(pehe_df)
 
-  cat("time_df:\n")
-  print(time_df)
+  #cat("time_df:\n")
+  #print(time_df)
 
   # Create a vector of colors
   colors <- c("#1B9E77", "#070707", "#6960e6", "#e9146d", "#0de177",
@@ -149,8 +149,8 @@ sample_sizes <- c(500, 1000, 5000, 10000)  # Example list of sample sizes
 plots <- create_plots(sample_sizes)
 
 # Print data frames sorted by method
-#cat("pehe_df sorted by Method:\n")
-#print(plots$pehe_df %>% arrange(SampleSize))
+cat("pehe_df sorted by Method:\n")
+print(plots$pehe_df %>% arrange(Method))
 
-#cat("time_df sorted by Method:\n")
-#print(plots$time_df %>% arrange(Method))
+cat("time_df sorted by Method:\n")
+print(plots$time_df %>% arrange(Method))
