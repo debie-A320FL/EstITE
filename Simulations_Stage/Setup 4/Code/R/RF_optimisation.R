@@ -1,4 +1,3 @@
-
 BScore <- function(x, y) mean((100*x - 100*y)^2)
 bias <- function(x, y) mean(100*x - 100*y)
 PEHE <- function(x, y) sqrt(mean((100*x - 100*y)^2))
@@ -24,7 +23,7 @@ data <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 set.seed(123)
 
 data = data[sample(nrow(data)),]
-size_sample = 10000
+size_sample = 1000000
 data = data[1:size_sample,]
 
 # Importer les hyperparamètres
@@ -53,6 +52,7 @@ N = data %>% nrow()
 
 #### PScore Estimation
 ## PScore Model - 1 hidden layer neural net
+print("estimating PS")
 PS_nn <- nnet(x = myX, y = myZ, size = 10, maxit = 2000, 
               decay = 0.01, trace=FALSE, abstol = 1.0e-8) 
 
@@ -72,15 +72,15 @@ rm(data)
     
     
     ### Common mu(x) model for RLOSS evaluation
-    mu_boost = xgboost::xgboost(label = myY, 
-                                data = myX,           
-                                max.depth = 3, 
-                                nround = 300,
-                                early_stopping_rounds = 4, 
-                                objective = "reg:squarederror",
-                                gamma = 1, verbose = F)
-    
-    mu_est = predict(mu_boost, myX)
+    #mu_boost = xgboost::xgboost(label = myY, 
+     #                           data = myX,           
+      #                          max.depth = 3, 
+      #                          nround = 300,
+      #                          early_stopping_rounds = 4, 
+      #                          objective = "reg:squarederror",
+      #                          gamma = 1, verbose = F)
+   # 
+    #mu_est = predict(mu_boost, myX)
     
     
     # Train-Test Splitting
@@ -109,19 +109,17 @@ rm(data)
     test_augmX = cbind(x_test, PS_est[smp_split == 2])
     
     
-# Function to optimize S_RF hyperparameters and measure performance
 optimize_and_evaluate_S_RF <- function(train_augmX, z_train, y_train, test_augmX, z_test, y_test,
-                                     Train_CATT, Test_CATT, Train_CATC, Test_CATC,
-                                     nfolds = 5, nthread = 0) {
-    sink()
-    print("starting...")
+                                     Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
+  print("starting...")
+
   # Define the hyperparameter grid to search
   param_grid <- expand.grid(
-    ntree = c(500, 1000, 1500, 2000,3000, 4000, 5000, 10000),  # Number of trees
-    mtry = c(floor(ncol(train_augmX)/3), floor(ncol(train_augmX)/2), floor(sqrt(ncol(train_augmX)))),  # Features to try at each split
-    nodesizeSpl = c(1, 3, 5),  # Minimum node size for splits
-    nodesizeAvg = c(3, 5, 7),  # Minimum node size for averages
-    sample.fraction = c(0.3,0.4, 0.5,0.6, 0.7, 0.8)  # Fraction of samples used for each tree
+    ntree = c(300,500,1000),  # Number of trees
+    mtry = c(1, 2, 3, 4),  # Features to try at each split
+    nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),  # Minimum node size for splits
+    nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),  # Minimum node size for averages
+    sample.fraction =c(0.1, 0.2, 0.3, 0.4, 0.5)  # Fraction of samples used for each tree
   )
 
   # Initialize variables to store best parameters and performance
@@ -129,60 +127,427 @@ optimize_and_evaluate_S_RF <- function(train_augmX, z_train, y_train, test_augmX
   best_performance <- Inf
   best_model <- NULL
 
+  # Initialize a list to store performance of all models
+  all_performances <- list()
+
   # Iterate over each row of the parameter grid
-for (i in 1:nrow(param_grid)) {
-  params <- param_grid[i, ]
+  for (i in 1:nrow(param_grid)) {
+    params <- param_grid[i, ]
 
-  print(params)
+    #print(params)
 
-  start_time <- Sys.time()
-  SRF <- S_RF(train_augmX, z_train, y_train,
-             mu.forestry = list(
-               relevant.Variable = 1:ncol(train_augmX),
-               ntree = params$ntree,
-               replace = TRUE,
-               sample.fraction = params$sample.fraction,
-               mtry = params$mtry,
-               nodesizeSpl = params$nodesizeSpl,
-               nodesizeAvg = params$nodesizeAvg,
-               splitratio = 0.5,
-               middleSplit = FALSE
-             ))
+    #start_time <- Sys.time()
+    SRF <- S_RF(train_augmX, z_train, y_train,
+               mu.forestry = list(
+                 relevant.Variable = 1:ncol(train_augmX),
+                 ntree = params$ntree,
+                 replace = TRUE,
+                 sample.fraction = params$sample.fraction,
+                 mtry = params$mtry,
+                 nodesizeSpl = params$nodesizeSpl,
+                 nodesizeAvg = params$nodesizeAvg,
+                 splitratio = 0.5,
+                 middleSplit = FALSE
+               ),
+               nthread = 0)
 
-    train_est = EstimateCate(SRF, train_augmX)
+    # train_est = EstimateCate(SRF, train_augmX)
     test_est = EstimateCate(SRF, test_augmX)
-    
-    end_time <- Sys.time()
-    execution_time <- end_time - start_time
 
-    print(paste0("S-RF_execution_time : ", execution_time))
+    #end_time <- Sys.time()
+    #execution_time <- end_time - start_time
+
+
+    #print(paste0("S-RF_execution_time : ", execution_time))
 
     # CATT
     CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
-    print("CATT_Test_PEHE")
-    print(CATT_Test_PEHE)
+    #print("CATT_Test_PEHE")
+    #print(CATT_Test_PEHE)
 
-    if (CATT_Test_PEHE < best_performance){
-        best_performance = CATT_Test_PEHE
-        best_params = params
-        best_model = SRF
+    # Store the performance of the current model
+    all_performances[[i]] <- list(params = params, performance = CATT_Test_PEHE)
+
+    if (CATT_Test_PEHE < best_performance) {
+      best_performance = CATT_Test_PEHE
+      best_params = params
+      best_model = SRF
+      if (verbose){
+      print("params")
+      print(params)
+      print("CATT_Test_PEHE")
+      print(CATT_Test_PEHE)
+      }
     }
 
     rm(SRF)
   }
 
-
-return(list(best_model=best_model,best_params=best_params, best_performance=best_performance ))
-  
+  return(list(best_model = best_model, best_params = best_params, best_performance = best_performance, all_performances = all_performances))
 }
 
-# Example usage:
-result <- optimize_and_evaluate_S_RF(
+if (0){
+  # Example usage:
+  result <- optimize_and_evaluate_S_RF(
+    train_augmX, z_train, y_train, test_augmX, z_test, y_test,
+    Train_CATT, verbose=FALSE
+  )
+
+  # Access the results:
+  best_model <- result$best_model
+  best_params <- result$best_params
+  print("best param")
+  print(best_params)
+  best_perf <- result$best_performance
+  print("best perf")
+  print(best_perf)
+
+  # Extract all performances
+  all_performances <- result$all_performances
+
+  # Convert the list of performances to a data frame
+  all_performances_df <- do.call(rbind, lapply(all_performances, function(x) {
+    data.frame(
+      ntree = x$params$ntree,
+      mtry = x$params$mtry,
+      nodesizeSpl = x$params$nodesizeSpl,
+      nodesizeAvg = x$params$nodesizeAvg,
+      sample.fraction = x$params$sample.fraction,
+      performance = x$performance
+    )
+  }))
+
+  # Order the data frame by performance
+  all_performances_df <- all_performances_df[order(all_performances_df$performance), ]
+
+  # Display the top 20 best performing parameters and their performance
+  top_20_performances <- head(all_performances_df, 20)
+  print(top_20_performances)
+}
+
+optimize_and_evaluate_S_RF_2 <- function(train_augmX, z_train, y_train, test_augmX, z_test, y_test,
+                                       Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
+  sink()
+  print("starting sequential optimization...")
+
+  # Initialize best parameters with default values
+  best_params <- list(
+    ntree = 1000,
+    mtry = 2,
+    nodesizeSpl = 1,
+    nodesizeAvg = 1,
+    sample.fraction = 0.2
+  )
+
+  best_performance <- Inf
+  best_model <- NULL
+
+  # Define parameter ranges to test sequentially
+  param_ranges <- list(
+    mtry = c(1, 2, 3, 4),
+    sample.fraction = c(0.01, 0.05,0.1, 0.2, 0.3, 0.4, 0.5),
+    nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),
+    nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),
+    ntree = c(1000, 1500, 2000, 3000, 5000, 10000, 300, 500)
+  )
+
+  # We'll keep ntree fixed as in your original code
+  #best_params$ntree <- 1000
+
+  # Sequential optimization
+  for (param_name in names(param_ranges)) {
+    print(paste("Optimizing", param_name))
+    current_values <- param_ranges[[param_name]]
+
+    for (value in current_values) {
+      # Update the parameter to test
+      params <- best_params
+      params[[param_name]] <- value
+
+      #start_time <- Sys.time()
+      SRF <- S_RF(train_augmX, z_train, y_train,
+                 mu.forestry = list(
+                   relevant.Variable = 1:ncol(train_augmX),
+                   ntree = params$ntree,
+                   replace = TRUE,
+                   sample.fraction = params$sample.fraction,
+                   mtry = params$mtry,
+                   nodesizeSpl = params$nodesizeSpl,
+                   nodesizeAvg = params$nodesizeAvg,
+                   splitratio = 0.5,
+                   middleSplit = FALSE
+                 ),
+                 nthread = 0)
+
+      test_est = EstimateCate(SRF, test_augmX)
+      #end_time <- Sys.time()
+      #execution_time <- end_time - start_time
+
+      # print(paste0("S-RF_execution_time : ", execution_time))
+
+      # CATT
+      CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
+
+      if (0) {
+        print("Current params")
+        print(params)
+        print("CATT_Test_PEHE")
+        print(CATT_Test_PEHE)
+      }
+
+      # Update best parameters if current performance is better
+      if (CATT_Test_PEHE < best_performance) {
+        best_performance = CATT_Test_PEHE
+        best_params <- params
+        best_model = SRF
+        if (verbose){
+          print("best_performance")
+          print(best_performance)
+        }
+      }
+
+      rm(SRF)
+    }
+  }
+
+  return(list(best_model = best_model, best_params = best_params, best_performance = best_performance))
+}
+
+for (i in 1:5){
+cat("\nS_RF2\n")
+cat(i)
+start_time_RF2 <- Sys.time()
+result <- optimize_and_evaluate_S_RF_2(
   train_augmX, z_train, y_train, test_augmX, z_test, y_test,
-  Train_CATT, Test_CATT, Train_CATC, Test_CATC
+  Train_CATT, verbose=FALSE
 )
 
-# Access the results:
-best_model <- result$best_model
-best_params <- result$best_params
+end_time_RF2 <- Sys.time()
+execution_time_RF2 <- end_time_RF2 - start_time_RF2
+print(paste0("S-RF_execution_time : ", execution_time_RF2))
 best_perf <- result$best_performance
+print("best perf")
+print(best_perf)
+best_params <- result$best_params
+#print("best param")
+#print(best_params)
+}
+
+
+if (0){
+print("\n\n\n\n")
+print("S_RF")
+start_time_RF <- Sys.time()
+result <- optimize_and_evaluate_S_RF(
+  train_augmX, z_train, y_train, test_augmX, z_test, y_test,
+  Train_CATT, verbose=FALSE
+)
+
+end_time <- Sys.time()
+execution_time <- end_time - start_time_RF
+print(paste0("S-RF_execution_time : ", execution_time))
+best_perf <- result$best_performance
+print("best perf")
+print(best_perf)
+best_params <- result$best_params
+#print("best param")
+#print(best_params)
+}
+
+optimize_and_evaluate_S_RF_3 <- function(train_augmX, z_train, y_train, test_augmX, z_test, y_test,
+                                       Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE,
+                                       performance_threshold = 0.9) {
+  print("starting less aggressive sequential optimization...")
+
+  current_params <- list(
+    ntree = 1000,
+    mtry = 2,
+    nodesizeSpl = 1,
+    nodesizeAvg = 1,
+    sample.fraction = 0.2
+  )
+
+  best_performance <- Inf
+  best_model <- NULL
+
+  param_ranges <- list(
+    sample.fraction = c(0.1, 0.2, 0.3, 0.4, 0.5),
+    mtry = c(1, 2, 3, 4),
+    nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),
+    nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),
+    ntree = c(300, 500, 1000, 1500, 2000, 3000, 5000, 10000)
+  )
+
+  acceptable_params <- list()
+  acceptable_performances <- list()
+
+  # Track how many unique parameter sets we've tried
+  tried_combinations <- list()
+
+  for (param_name in names(param_ranges)) {
+    print(paste("Optimizing", param_name))
+    current_values <- param_ranges[[param_name]]
+
+    param_performances <- list()
+
+    for (value in current_values) {
+      test_params <- current_params
+      test_params[[param_name]] <- value
+
+      if (length(acceptable_params) > 0) {
+        for (i in 1:length(acceptable_params)) {
+          params <- acceptable_params[[i]]
+          params[[param_name]] <- value
+
+          # Hash the combination to avoid duplication
+          key <- paste(unlist(params), collapse = "_")
+          if (key %in% names(tried_combinations)) next
+          tried_combinations[[key]] <- TRUE
+
+          #start_time <- Sys.time()
+          SRF <- S_RF(train_augmX, z_train, y_train,
+                     mu.forestry = list(
+                       relevant.Variable = 1:ncol(train_augmX),
+                       ntree = params$ntree,
+                       replace = TRUE,
+                       sample.fraction = params$sample.fraction,
+                       mtry = params$mtry,
+                       nodesizeSpl = params$nodesizeSpl,
+                       nodesizeAvg = params$nodesizeAvg,
+                       splitratio = 0.5,
+                       middleSplit = FALSE
+                     ),
+                     nthread = 0)
+
+          test_est = EstimateCate(SRF, test_augmX)
+          #end_time <- Sys.time()
+
+          CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
+
+          param_performances[[length(param_performances) + 1]] <- list(
+            params = params,
+            performance = CATT_Test_PEHE
+          )
+
+          if (CATT_Test_PEHE < best_performance) {
+            best_performance = CATT_Test_PEHE
+            best_model = SRF
+          }
+
+          rm(SRF)
+        }
+      } else {
+        params <- test_params
+
+        key <- paste(unlist(params), collapse = "_")
+        if (key %in% names(tried_combinations)) next
+        tried_combinations[[key]] <- TRUE
+
+        #start_time <- Sys.time()
+        SRF <- S_RF(train_augmX, z_train, y_train,
+                   mu.forestry = list(
+                     relevant.Variable = 1:ncol(train_augmX),
+                     ntree = params$ntree,
+                     replace = TRUE,
+                     sample.fraction = params$sample.fraction,
+                     mtry = params$mtry,
+                     nodesizeSpl = params$nodesizeSpl,
+                     nodesizeAvg = params$nodesizeAvg,
+                     splitratio = 0.5,
+                     middleSplit = FALSE
+                   ),
+                   nthread = 0)
+
+        test_est = EstimateCate(SRF, test_augmX)
+        #end_time <- Sys.time()
+
+        CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
+
+        param_performances[[length(param_performances) + 1]] <- list(
+          params = params,
+          performance = CATT_Test_PEHE
+        )
+
+        if (CATT_Test_PEHE < best_performance) {
+          best_performance = CATT_Test_PEHE
+          best_model = SRF
+        }
+
+        rm(SRF)
+      }
+    }
+
+    current_best <- min(sapply(param_performances, function(x) x$performance))
+
+    acceptable_params <- list()
+    acceptable_performances <- list()
+
+    for (i in 1:length(param_performances)) {
+      perf_ratio <- param_performances[[i]]$performance / current_best
+      if (perf_ratio <= 1 / performance_threshold) {
+        acceptable_params[[length(acceptable_params) + 1]] <- param_performances[[i]]$params
+        acceptable_performances[[length(acceptable_performances) + 1]] <- param_performances[[i]]$performance
+      }
+    }
+
+    if (verbose) {
+      print(paste("Keeping", length(acceptable_params), "parameter combinations for", param_name))
+      print(paste("Best performance:", current_best))
+    }
+
+    if (length(acceptable_params) > 0) {
+      best_single_param <- acceptable_params[[which.min(sapply(acceptable_performances, function(x) x))]]
+      current_params[[param_name]] <- best_single_param[[param_name]]
+    }
+  }
+
+  if (length(acceptable_params) > 0) {
+    best_index <- which.min(sapply(acceptable_performances, function(x) x))
+    best_params <- acceptable_params[[best_index]]
+    best_performance <- acceptable_performances[[best_index]]
+  } else {
+    best_params <- current_params
+  }
+
+  # Compute total possible combinations (full grid)
+  total_possible <- prod(sapply(param_ranges, length))
+  total_tried <- length(tried_combinations)
+
+  cat("Tried", total_tried, "unique combinations out of", total_possible, "possible.\n")
+
+  return(list(best_model = best_model, best_params = best_params, best_performance = best_performance,
+              acceptable_params = acceptable_params, acceptable_performances = acceptable_performances))
+}
+
+for (i in 1:0){
+cat("\nS_RF3_0.95\n")
+start_time_RF3 <- Sys.time()
+result <- optimize_and_evaluate_S_RF_3(
+  train_augmX, z_train, y_train, test_augmX, z_test, y_test,
+  Train_CATT, verbose=FALSE, performance_threshold = 0.95
+)
+
+end_time_RF3 <- Sys.time()
+execution_time_RF3 <- end_time_RF3 - start_time_RF3
+print(paste0("S-RF_execution_time : ", execution_time_RF3))
+best_perf <- result$best_performance
+print("best perf")
+print(best_perf)
+}
+
+
+for (i in 1:0){
+cat("\nS_RF3_0.90\n")
+start_time_RF3 <- Sys.time()
+result <- optimize_and_evaluate_S_RF_3(
+  train_augmX, z_train, y_train, test_augmX, z_test, y_test,
+  Train_CATT, verbose=FALSE, performance_threshold = 0.90
+)
+
+end_time_RF3 <- Sys.time()
+execution_time_RF3 <- end_time_RF3 - start_time_RF3
+print(paste0("S-RF_execution_time : ", execution_time_RF3))
+best_perf <- result$best_performance
+print("best perf")
+print(best_perf)
+}

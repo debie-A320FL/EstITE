@@ -110,7 +110,7 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
   }
 }
 
-data <- generate_data(n = 1000000)
+data <- generate_data(n = 100000000)
 
 data %>% head()
 
@@ -129,6 +129,6 @@ data %>%
   filter(gender == 0) %>%
   summarise(proportion = mean(treatment == 1))
 
-export_data_to_csv(data, file_name = "simulated_1M_data.csv",
+export_data_to_csv(data, file_name = "simulated_100M_data.csv",
                    directory = ".",
                    overwrite = FALSE)
