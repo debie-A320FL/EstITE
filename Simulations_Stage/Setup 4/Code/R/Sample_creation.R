@@ -112,7 +112,7 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
 }
 
 # Data sans effet de traitement
-data <- generate_data(n = 10000,
+data <- generate_data(n = 1e8,
                       delta_0 = 0, delta_1 = 0, delta_2 = 0,
                       delta_3 = 0, delta_4 = 0)
 

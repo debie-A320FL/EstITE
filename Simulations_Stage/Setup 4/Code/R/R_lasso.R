@@ -23,7 +23,7 @@ data <- read.csv("./../Setup 1a/Data/simulated_100M_data.csv")
 set.seed(123)
 
 data = data[sample(nrow(data)),]
-size_sample = 1e7
+size_sample = 1e8
 data = data[1:size_sample,]
 
 # Importer les hyperparamètres
