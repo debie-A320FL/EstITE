@@ -23,7 +23,9 @@ data <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 set.seed(123)
 
 data = data[sample(nrow(data)),]
-size_sample = 10000
+size_sample = 100000
+print("size sample")
+print(size_sample)
 data = data[1:size_sample,]
 
 # Importer les hyperparamètres
@@ -245,7 +247,7 @@ optimize_and_evaluate_S_RF_2 <- function(train_augmX, z_train, y_train, test_aug
   # Define parameter ranges to test sequentially
   param_ranges <- list(
     mtry = c(1, 2, 3, 4),
-    sample.fraction = c(0.01, 0.05,0.1, 0.2, 0.3, 0.4, 0.5),
+    sample.fraction = c(0.01, 0.05,0.1, 0.2, 0.3, 0.4, 0.5, 0.6),
     nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),
     nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),
     ntree = c(1000, 1500, 2000, 3000, 5000, 10000, 300, 500)
@@ -316,8 +318,7 @@ optimize_and_evaluate_S_RF_2 <- function(train_augmX, z_train, y_train, test_aug
 
 if (1){
 for (i in 1:1){
-cat("\nS_RF2 bla\n")
-cat(i)
+cat("\nS_RF (lazy)\n")
 start_time_RF2 <- Sys.time()
 result <- optimize_and_evaluate_S_RF_2(
   train_augmX, z_train, y_train, test_augmX, z_test, y_test,
@@ -326,7 +327,8 @@ result <- optimize_and_evaluate_S_RF_2(
 
 end_time_RF2 <- Sys.time()
 execution_time_RF2 <- end_time_RF2 - start_time_RF2
-print(paste0("S-RF_execution_time : ", execution_time_RF2))
+print("S-RF_execution_time : ")
+print(execution_time_RF2)
 best_perf <- result$best_performance
 print("best perf")
 print(best_perf)
@@ -577,11 +579,11 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
 
   # Define parameter grid
   param_ranges <- list(
-    mtry = c(1, 2, 3, 4, ncol(train_augmX)),
-    sample.fraction = c(0.05, 0.1, 0.2, 0.5, 0.9),
-    nodesizeSpl = c(1, 3, 5, 10, 15),
-    nodesizeAvg = c(1, 3, 5, 10, 15),
-    ntree = c(300, 500, 1000, 1500)
+    mtry = c(1, 2, 3, 4),
+    sample.fraction = c(0.01, 0.05,0.1, 0.2, 0.3, 0.4, 0.5, 0.6),
+    nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),
+    nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),
+    ntree = c(1000, 1500, 2000, 3000, 5000, 10000, 300, 500)
   )
 
   # ---- Optimize mu0 ----
@@ -705,15 +707,278 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
 
 cat("\n\n\n\n")
 print("T_RF")
-start_time_RF <- Sys.time()
+start_time <- Sys.time()
 result <- optimize_and_evaluate_T_RF(
   train_augmX, z_train, y_train, test_augmX, z_test, y_test,
   Train_CATT, verbose=FALSE
 )
 
 end_time <- Sys.time()
+execution_time <- end_time - start_time
+print("T-RF_execution_time : ")
+print(execution_time)
+best_perf <- result$best_performance
+print("best perf")
+print(best_perf)
+best_params <- result$best_params
+
+
+optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
+                                       test_augmX, z_test, y_test,
+                                       Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
+  sink()
+  print("Starting sequential optimization for X-RF...")
+
+  # Set default values
+  default_params <- list(
+    ntree = 1000,
+    mtry = round(ncol(train_augmX) * 0.5),
+    nodesizeSpl = 2,
+    nodesizeAvg = 1,
+    sample.fraction = 0.5
+  )
+
+  best_mu <- default_params
+  best_tau <- default_params
+  best_e <- list(
+    ntree = 500,
+    mtry = ncol(train_augmX),
+    nodesizeSpl = 11,
+    nodesizeAvg = 33,
+    sample.fraction = 0.5
+  )
+
+  best_performance <- Inf
+  best_model <- NULL
+
+  param_ranges <- list(
+    mtry = c(1, 2, 3, 4),
+    sample.fraction = c(0.01, 0.05,0.1, 0.2, 0.3, 0.4, 0.5, 0.6),
+    nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),
+    nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),
+    ntree = c(1000, 1500, 2000, 3000, 5000, 10000, 300, 500)
+  )
+
+  ### -------- Optimize mu.forestry --------
+  for (param_name in names(param_ranges)) {
+    print(paste("Optimizing mu.forestry:", param_name))
+    for (value in param_ranges[[param_name]]) {
+      mu_params <- best_mu
+      mu_params[[param_name]] <- value
+
+      XRF <- X_RF(
+        feat = train_augmX,
+        tr = z_train,
+        yobs = y_train,
+        predmode = "propmean",
+        nthread = nthread,
+        verbose = FALSE,
+        mu.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = mu_params$ntree,
+          replace = TRUE,
+          sample.fraction = mu_params$sample.fraction,
+          mtry = mu_params$mtry,
+          nodesizeSpl = mu_params$nodesizeSpl,
+          nodesizeAvg = mu_params$nodesizeAvg,
+          splitratio = 1,
+          middleSplit = TRUE
+        ),
+        tau.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_tau$ntree,
+          replace = TRUE,
+          sample.fraction = best_tau$sample.fraction,
+          mtry = best_tau$mtry,
+          nodesizeSpl = best_tau$nodesizeSpl,
+          nodesizeAvg = best_tau$nodesizeAvg,
+          splitratio = 0.8,
+          middleSplit = TRUE
+        ),
+        e.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_e$ntree,
+          replace = TRUE,
+          sample.fraction = best_e$sample.fraction,
+          mtry = best_e$mtry,
+          nodesizeSpl = best_e$nodesizeSpl,
+          nodesizeAvg = best_e$nodesizeAvg,
+          splitratio = 0.5,
+          middleSplit = FALSE
+        )
+      )
+
+      test_est <- EstimateCate(XRF, test_augmX)
+      PEHE_val <- PEHE(Test_CATT, test_est[z_test == 1])
+
+      if (PEHE_val < best_performance) {
+        best_performance <- PEHE_val
+        best_mu <- mu_params
+        best_model <- XRF
+        if (verbose) {
+          print("Updated best performance (mu):")
+          print(best_performance)
+        }
+      }
+
+      rm(XRF)
+    }
+  }
+
+  ### -------- Optimize tau.forestry --------
+  for (param_name in names(param_ranges)) {
+    print(paste("Optimizing tau.forestry:", param_name))
+    for (value in param_ranges[[param_name]]) {
+      tau_params <- best_tau
+      tau_params[[param_name]] <- value
+
+      XRF <- X_RF(
+        feat = train_augmX,
+        tr = z_train,
+        yobs = y_train,
+        predmode = "propmean",
+        nthread = nthread,
+        verbose = FALSE,
+        mu.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_mu$ntree,
+          replace = TRUE,
+          sample.fraction = best_mu$sample.fraction,
+          mtry = best_mu$mtry,
+          nodesizeSpl = best_mu$nodesizeSpl,
+          nodesizeAvg = best_mu$nodesizeAvg,
+          splitratio = 1,
+          middleSplit = TRUE
+        ),
+        tau.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = tau_params$ntree,
+          replace = TRUE,
+          sample.fraction = tau_params$sample.fraction,
+          mtry = tau_params$mtry,
+          nodesizeSpl = tau_params$nodesizeSpl,
+          nodesizeAvg = tau_params$nodesizeAvg,
+          splitratio = 0.8,
+          middleSplit = TRUE
+        ),
+        e.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_e$ntree,
+          replace = TRUE,
+          sample.fraction = best_e$sample.fraction,
+          mtry = best_e$mtry,
+          nodesizeSpl = best_e$nodesizeSpl,
+          nodesizeAvg = best_e$nodesizeAvg,
+          splitratio = 0.5,
+          middleSplit = FALSE
+        )
+      )
+
+      test_est <- EstimateCate(XRF, test_augmX)
+      PEHE_val <- PEHE(Test_CATT, test_est[z_test == 1])
+
+      if (PEHE_val < best_performance) {
+        best_performance <- PEHE_val
+        best_tau <- tau_params
+        best_model <- XRF
+        if (verbose) {
+          print("Updated best performance (tau):")
+          print(best_performance)
+        }
+      }
+
+      rm(XRF)
+    }
+  }
+
+  ### -------- Optimize e.forestry --------
+  for (param_name in names(param_ranges)) {
+    print(paste("Optimizing e.forestry:", param_name))
+    for (value in param_ranges[[param_name]]) {
+      e_params <- best_e
+      e_params[[param_name]] <- value
+
+      XRF <- X_RF(
+        feat = train_augmX,
+        tr = z_train,
+        yobs = y_train,
+        predmode = "propmean",
+        nthread = nthread,
+        verbose = FALSE,
+        mu.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_mu$ntree,
+          replace = TRUE,
+          sample.fraction = best_mu$sample.fraction,
+          mtry = best_mu$mtry,
+          nodesizeSpl = best_mu$nodesizeSpl,
+          nodesizeAvg = best_mu$nodesizeAvg,
+          splitratio = 1,
+          middleSplit = TRUE
+        ),
+        tau.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_tau$ntree,
+          replace = TRUE,
+          sample.fraction = best_tau$sample.fraction,
+          mtry = best_tau$mtry,
+          nodesizeSpl = best_tau$nodesizeSpl,
+          nodesizeAvg = best_tau$nodesizeAvg,
+          splitratio = 0.8,
+          middleSplit = TRUE
+        ),
+        e.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = e_params$ntree,
+          replace = TRUE,
+          sample.fraction = e_params$sample.fraction,
+          mtry = e_params$mtry,
+          nodesizeSpl = e_params$nodesizeSpl,
+          nodesizeAvg = e_params$nodesizeAvg,
+          splitratio = 0.5,
+          middleSplit = FALSE
+        )
+      )
+
+      test_est <- EstimateCate(XRF, test_augmX)
+      PEHE_val <- PEHE(Test_CATT, test_est[z_test == 1])
+
+      if (PEHE_val < best_performance) {
+        best_performance <- PEHE_val
+        best_e <- e_params
+        best_model <- XRF
+        if (verbose) {
+          print("Updated best performance (e):")
+          print(best_performance)
+        }
+      }
+
+      rm(XRF)
+    }
+  }
+
+  return(list(
+    best_model = best_model,
+    best_mu_params = best_mu,
+    best_tau_params = best_tau,
+    best_e_params = best_e,
+    best_performance = best_performance
+  ))
+}
+
+
+cat("\n\n\n\n")
+print("X_RF")
+start_time_RF <- Sys.time()
+result <- optimize_and_evaluate_X_RF(
+  train_augmX, z_train, y_train, test_augmX, z_test, y_test,
+  Train_CATT, verbose=FALSE
+)
+
+end_time <- Sys.time()
 execution_time <- end_time - start_time_RF
-print(paste0("S-RF_execution_time : ", execution_time))
+print("X-RF_execution_time : ")
+print(execution_time)
 best_perf <- result$best_performance
 print("best perf")
 print(best_perf)
