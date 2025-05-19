@@ -60,11 +60,11 @@ Ce scénario est identique est précédant, mais dans ce dernier l'effet du trai
 
 ### Setup 2a
 
-Ce scénario reprend le scénario 1a. Néanmoins on considère ici un $Y$ continue valant la probabilité de valoir 1 et non pas le résultat d'une Bernouilli.
+Ce scénario reprend le scénario 1a. Néanmoins on considère ici un $Y$ continue valant la probabilité de valoir 1 et non pas le résultat d'une Bernoulli.
 
 ### Setup 2b
 
-Ce scénario reprend le scénario 1b. Néanmoins on considère ici un $Y$ continue valant la probabilité de valoir 1 et non pas le résultat d'une Bernouilli.
+Ce scénario reprend le scénario 1b. Néanmoins on considère ici un $Y$ continue valant la probabilité de valoir 1 et non pas le résultat d'une Bernoulli.
 
 ### Setup 3
 
