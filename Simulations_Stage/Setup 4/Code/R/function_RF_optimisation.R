@@ -727,3 +727,95 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
     best_performance = best_performance
   ))
 }
+
+prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_ratio = 0.7){
+  set.seed(seed)
+
+  data = data[sample(nrow(data)),]
+  #size_sample = nrow(data)
+  #print("size sample")
+  #print(size_sample)
+  data = data[1:size_sample,]
+
+  # Extraire les variables nécessaires
+  myZ <- data$treatment
+  # myY <- data$Y
+  myX <- data %>% select(-treatment, -Y) %>% as.matrix()
+
+  # Calculer mu_0, tau, et ITE
+  mu_0 <- hyperparams$gamma_0 + hyperparams$gamma_1 * myX[, "age"] + hyperparams$gamma_2 * myX[, "weight"] + hyperparams$gamma_3 * myX[, "comorbidities"] + hyperparams$gamma_4 * myX[, "gender"]
+  tau <- hyperparams$delta_0 + hyperparams$delta_1 * myX[, "age"] + hyperparams$delta_2 * myX[, "weight"] + hyperparams$delta_3 * myX[, "comorbidities"] + hyperparams$delta_4 * myX[, "gender"]
+  ITE <- mu_0 + tau * myZ
+
+  # Ajouter une colonne pi pour la probabilité théorique
+  data$pi <- 1 / (1 + exp(-(mu_0 + tau * myZ)))
+
+  ITE_proba <- 1 / (1 + exp(-(mu_0 + tau))) - 1 / (1 + exp(-mu_0))
+
+
+  # Estimation --------------------------------------------------------------
+
+  ### OPTIONS
+  N = data %>% nrow()
+
+  #### PScore Estimation
+  ## PScore Model - 1 hidden layer neural net
+  print("estimating PS")
+  PS_nn <- nnet(x = myX, y = myZ, size = 10, maxit = 2000, 
+                decay = 0.01, trace=FALSE, abstol = 1.0e-8) 
+
+  PS_est = PS_nn$fitted.values
+
+  # Remove unused vars
+  rm(data)
+
+  bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(hyperparams$sigma_sq))
+
+  # Appliquer la fonction logistique
+  fac = 1
+  myY <- plogis(ITE + bruit_gaussien * fac)
+
+
+  
+  
+  ### Common mu(x) model for RLOSS evaluation
+  #mu_boost = xgboost::xgboost(label = myY, 
+    #                           data = myX,           
+    #                          max.depth = 3, 
+    #                          nround = 300,
+    #                          early_stopping_rounds = 4, 
+    #                          objective = "reg:squarederror",
+    #                          gamma = 1, verbose = F)
+  # 
+  #mu_est = predict(mu_boost, myX)
+  
+  
+  # Train-Test Splitting
+  mysplit <- c(rep(1, ceiling(train_ratio*N)), 
+                rep(2, floor((1- train_ratio)*N)))
+  
+  smp_split <- sample(mysplit, replace = FALSE)  # random permutation
+  
+  y_train <- myY[smp_split == 1]
+  y_test <- myY[smp_split == 2]
+  
+  x_train <- myX[smp_split == 1, ]
+  x_test <- myX[smp_split == 2, ]
+  
+  z_train <- myZ[smp_split == 1]
+  z_test <- myZ[smp_split == 2]
+  
+  Train_ITE <- ITE_proba[smp_split == 1]
+  Test_ITE <- ITE_proba[smp_split == 2]
+  
+  Train_CATT <- Train_ITE[z_train == 1]; Train_CATC <- Train_ITE[z_train == 0]
+  Test_CATT <- Test_ITE[z_test == 1]; Test_CATC <- Test_ITE[z_test == 0]
+  
+  # Augment X with PS estimates
+  train_augmX = cbind(x_train, PS_est[smp_split == 1])
+  test_augmX = cbind(x_test, PS_est[smp_split == 2])
+
+  return(list(train_augmX = train_augmX, z_train = z_train, y_train = y_train,
+              test_augmX = test_augmX, z_test = z_test, y_test = y_test,
+              Test_CATT = Test_CATT))
+}
