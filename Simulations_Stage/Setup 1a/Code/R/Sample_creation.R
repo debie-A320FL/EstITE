@@ -14,7 +14,7 @@ generate_data <- function(n = 1000,
                           beta_0 = -3.5, beta_1 = 0.05, beta_2 = 0.02, beta_3 = 0.5, beta_4 = 0.3,
                           gamma_0 = 0.1, gamma_1 = 0.01, gamma_2 = 0.005, gamma_3 = 0.2, gamma_4 = 0.1,
                           delta_0 = -0.1, delta_1 = 0.005, delta_2 = 0.002, delta_3 = 0.1, delta_4 = 0.05,
-                          sigma_sq = 0.1) {
+                          sigma_sq = 0.1, seed = 123) {
   # Documentation des paramètres
   # n : Nombre d'individus à générer
   # age_mean, age_sd : Moyenne et écart-type de la distribution de l'âge
@@ -37,7 +37,7 @@ generate_data <- function(n = 1000,
   #    Y_i ~ Bernoulli(p_i) où p_i = 1 / (1 + exp(-(mu_0(X_i) + T_i * tau(X_i) + epsilon_i)))
   
   # Générer les caractéristiques des individus
-  set.seed(123) # Pour la reproductibilité
+  set.seed(seed) # Pour la reproductibilité
   age <- rnorm(n, mean = age_mean, sd = age_sd)
   gender <- rbinom(n, 1, 0.5) # 0 pour homme, 1 pour femme
   weight <- ifelse(gender == 0,
@@ -110,25 +110,14 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
   }
 }
 
-data <- generate_data(n = 100000000)
+data <- generate_data(n = 1e6, seed = 123) # train, test
+data <- generate_data(n = 1e4, seed = 31415) # validation
 
 data %>% head()
 
 
 data %>% summary()
 
-# Afficher le résumé des données pour les hommes (gender == 0)
-summary_males <- data %>% filter(gender == 0) %>% select(-gender) %>% summary()
-print(summary_males)
-
-# Afficher le résumé des données pour les femmes (gender == 0)
-summary_females <- data %>% filter(gender == 1) %>% select(-gender) %>% summary()
-print(summary_females)
-
-data %>%
-  filter(gender == 0) %>%
-  summarise(proportion = mean(treatment == 1))
-
-export_data_to_csv(data, file_name = "simulated_100M_data.csv",
+export_data_to_csv(data, file_name = "simulated_10K_data_validation.csv",
                    directory = ".",
-                   overwrite = FALSE)
+                   overwrite = TRUE)
