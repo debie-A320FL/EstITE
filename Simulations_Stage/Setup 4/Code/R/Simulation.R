@@ -103,7 +103,7 @@ res_val = prepare_train_data(data = data_validation, hyperparams = hyperparams,
 val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
 val_CATT = res_val$Test_CATT
 
-list_size <- c(1000)
+list_size <- c(1000, 2000, 3000, 5000, 10000)
 for (size_sample in list_size) {
 
   print(paste("size_sample =", size_sample))
@@ -111,7 +111,7 @@ for (size_sample in list_size) {
   # Estimation --------------------------------------------------------------
 
   ### OPTIONS
-  B = 3   # Num of Simulations
+  B = 80   # Num of Simulations
 
   MLearners = c('R-LASSO',"S-RF","T-RF","X-RF",
                   "S-RF-opti", "T-RF-opti", "X-RF-opti",
@@ -140,7 +140,7 @@ for (size_sample in list_size) {
     
     gc()
     
-    cat("\n-------- Iteration", i, "--------\n")
+    cat("\n*** Iteration", i, " - size sample : ",size_sample, "\n")
     
     
     if(i<=500){set.seed(502 + i*5); seed = 502 + i*5}
@@ -179,8 +179,8 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'S-RF'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'S-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'S-RF'])  
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'S-RF'])  
 
     rm(SRF)
 
@@ -207,8 +207,8 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'S-RF-opti'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'S-RF-opti'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'S-RF-opti']) 
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'S-RF-opti']) 
 
     rm(SRF)
     rm(SRF_result)
@@ -232,8 +232,8 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'T-RF'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'T-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'T-RF']) 
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'T-RF']) 
 
     rm(TRF)
 
@@ -259,8 +259,8 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'T-RF-opti'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'T-RF-opti'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'T-RF-opti']) 
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'T-RF-opti']) 
 
     rm(TRF)
     rm(TRF_result)
@@ -283,8 +283,8 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'X-RF'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'X-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'X-RF']) 
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'X-RF']) 
 
     rm(XRF)
 
@@ -310,8 +310,8 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'X-RF-opti'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'X-RF-opti'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'X-RF-opti'])
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'X-RF-opti'])
     
     rm(XRF)
     rm(XRF_result)
@@ -339,8 +339,8 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'R-LASSO'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'R-LASSO'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'R-LASSO'])
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'R-LASSO'])
 
     rm(RLASSO)
 
@@ -368,16 +368,11 @@ for (size_sample in list_size) {
     Results$CATT_Test_Bias[i, 'R-LASSO-opti'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'R-LASSO-opti'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    print("Perf on test data")
-    print(Results$CATT_Test_PEHE[i, 'R-LASSO-opti'])
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'R-LASSO-opti'])
 
     rm(result)
     rm(RLASSO)
-
-
-
-
-
   }
   
 )
