@@ -34,8 +34,10 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 
 # Importer les données
 # Load Data
-curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
-setwd(curr_dir); setwd('./../../')
+#curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
+#setwd(curr_dir); setwd('./../../')
+
+setwd("/home/onyxia/work/EstITE/Simulations_Stage/Setup 4")
 
 #list_size <- c(500,1000,5000, 10000)
 
@@ -44,17 +46,7 @@ setwd(curr_dir); setwd('./../../')
 hyperparams <- read.csv("./../Setup 1a/Data/hyperparams.csv")
 
 data_train_test <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
-
-size_sample_train_test = 10000
-print("size_sample_train_test")
-print(size_sample_train_test)
-res_train_test = prepare_train_data(data = data_train_test, hyperparams = hyperparams,
-                                    size_sample = size_sample_train_test,
-                                    train_ratio = 0.7)
-
-train_augmX = res_train_test$train_augmX; z_train = res_train_test$z_train; y_train = res_train_test$y_train
-test_augmX = res_train_test$test_augmX; z_test = res_train_test$z_test; y_test = res_train_test$y_test
-Test_CATT = res_train_test$Test_CATT
+set.seed(502 + 5); seed = 502 + 5
 
 cat("\n")
 data_validation <- read.csv("./../Setup 1a/Data/simulated_10K_data_validation.csv")
@@ -67,6 +59,19 @@ res_val = prepare_train_data(data = data_validation, hyperparams = hyperparams,
 
 val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
 val_CATT = res_val$Test_CATT
+
+
+size_sample_train_test = 500
+print("size_sample_train_test")
+print(size_sample_train_test)
+res_train_test = prepare_train_data(data = data_train_test, hyperparams = hyperparams,
+                                    size_sample = size_sample_train_test,
+                                    train_ratio = 0.7, seed = seed)
+
+train_augmX = res_train_test$train_augmX; z_train = res_train_test$z_train; y_train = res_train_test$y_train
+test_augmX = res_train_test$test_augmX; z_test = res_train_test$z_test; y_test = res_train_test$y_test
+Test_CATT = res_train_test$Test_CATT
+
 
 
 cat("\nS_RF\n")

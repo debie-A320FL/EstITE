@@ -77,7 +77,8 @@ optimize_and_evaluate_S_RF <- function(train_augmX, z_train, y_train, test_augmX
 
 optimize_and_evaluate_S_RF_2 <- function(train_augmX, z_train, y_train, test_augmX, z_test, y_test,
                                        Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
-  print("starting sequential optimization...")
+
+  #print("starting sequential optimization...")
 
   # Initialize best parameters with default values
   best_params <- list(
@@ -105,7 +106,9 @@ optimize_and_evaluate_S_RF_2 <- function(train_augmX, z_train, y_train, test_aug
 
   # Sequential optimization
   for (param_name in names(param_ranges)) {
+    if (verbose){
     print(paste("Optimizing", param_name))
+    }
     current_values <- param_ranges[[param_name]]
 
     for (value in current_values) {
@@ -330,7 +333,7 @@ optimize_and_evaluate_S_RF_3 <- function(train_augmX, z_train, y_train, test_aug
 optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
                                        test_augmX, z_test, y_test,
                                        Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
-  print("Starting sequential optimization for T-RF...")
+  #print("Starting sequential optimization for T-RF...")
 
   # Initialize best parameters
   best_mu0 <- list(
@@ -356,7 +359,9 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
 
   # ---- Optimize mu0 ----
   for (param_name in names(param_ranges)) {
+    if (verbose){
     print(paste("Optimizing mu0:", param_name))
+    }
     for (value in param_ranges[[param_name]]) {
       mu0_params <- best_mu0
       mu0_params[[param_name]] <- value
@@ -410,7 +415,9 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
 
   # ---- Optimize mu1 ----
   for (param_name in names(param_ranges)) {
+    if (verbose){
     print(paste("Optimizing mu1:", param_name))
+    }
     for (value in param_ranges[[param_name]]) {
       mu1_params <- best_mu1
       mu1_params[[param_name]] <- value
@@ -473,7 +480,7 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
 optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
                                        test_augmX, z_test, y_test,
                                        Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
-  print("Starting sequential optimization for X-RF...")
+  #print("Starting sequential optimization for X-RF...")
 
   # Set default values
   default_params <- list(
@@ -507,7 +514,9 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
 
   ### -------- Optimize mu.forestry --------
   for (param_name in names(param_ranges)) {
+    if (verbose){
     print(paste("Optimizing mu.forestry:", param_name))
+    }
     for (value in param_ranges[[param_name]]) {
       mu_params <- best_mu
       mu_params[[param_name]] <- value
@@ -573,7 +582,9 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
 
   ### -------- Optimize tau.forestry --------
   for (param_name in names(param_ranges)) {
+    if (verbose){
     print(paste("Optimizing tau.forestry:", param_name))
+    }
     for (value in param_ranges[[param_name]]) {
       tau_params <- best_tau
       tau_params[[param_name]] <- value
@@ -655,10 +666,17 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
 
   ### -------- Optimize e.forestry --------
   for (param_name in names(param_ranges)) {
+    if (verbose){
     print(paste("Optimizing e.forestry:", param_name))
+    }
     for (value in param_ranges[[param_name]]) {
       e_params <- best_e
       e_params[[param_name]] <- value
+
+      if (verbose){
+        print("ntree")
+        print(e_params$ntree)
+      }
 
       XRF <- X_RF(
         feat = train_augmX,
@@ -760,7 +778,7 @@ prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_r
 
   #### PScore Estimation
   ## PScore Model - 1 hidden layer neural net
-  print("estimating PS")
+  #print("estimating PS")
   PS_nn <- nnet(x = myX, y = myZ, size = 10, maxit = 2000, 
                 decay = 0.01, trace=FALSE, abstol = 1.0e-8) 
 
