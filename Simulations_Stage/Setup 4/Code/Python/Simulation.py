@@ -47,7 +47,7 @@ basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
 N_size = [1000, 2000, 3000, 5000, 10000]
 
-for N in N_size:
+for N in N_size[1:]:
     print(f"N = {N}")
     data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
@@ -149,7 +149,7 @@ for N in N_size:
 
     for i in range(B):
 
-        print("\n*** Iteration", i+1)
+        print(f"\n*** Iteration {i+1} - Size sample : {N}")
 
         # Set seed
         np.random.seed(100 + i)
