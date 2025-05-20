@@ -720,6 +720,10 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
         )
       )
 
+      if (verbose){
+        print("XRF succeed")
+      }
+
       test_est <- EstimateCate(XRF, test_augmX)
       PEHE_val <- PEHE(Test_CATT, test_est[z_test == 1])
 
@@ -836,4 +840,58 @@ prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_r
   return(list(train_augmX = train_augmX, z_train = z_train, y_train = y_train,
               test_augmX = test_augmX, z_test = z_test, y_test = y_test,
               Test_CATT = Test_CATT))
+}
+
+optimize_and_evaluate_rlasso <- function(x_train, w_train, y_train,
+                                         x_test, w_test, y_test,
+                                         Test_CATT,
+                                         alpha_values = seq(0, 1, by = 0.1),
+                                         lambda_choice = "lambda.min",
+                                         verbose = TRUE) {
+
+  best_performance <- Inf
+  best_model <- NULL
+  best_alpha <- NULL
+
+  for (alpha in alpha_values) {
+    if (verbose) {
+      #cat("Evaluating alpha =", alpha, "\n")
+    }
+
+    # Train rlasso model
+    model <- rlasso(
+      x = x_train,
+      w = w_train,
+      y = y_train,
+      alpha = alpha,
+      lambda_choice = lambda_choice
+    )
+
+    # Estimate CATE on test set
+    cate_test_est <- predict(model, newx = x_test)
+
+    # Calculate PEHE (or another performance metric)
+    current_pehe <- PEHE(Test_CATT, cate_test_est[w_test == 1])
+
+    if (verbose) {
+      cat("PEHE for alpha =", alpha, ":", current_pehe, "\n")
+    }
+
+    if (current_pehe < best_performance) {
+      best_performance <- current_pehe
+      best_model <- model
+      best_alpha <- alpha
+      if (verbose) {
+        cat("New best alpha found:", best_alpha, "with PEHE:", best_performance, "\n")
+      }
+    }
+
+    rm(model)
+  }
+
+  return(list(
+    best_model = best_model,
+    best_alpha = best_alpha,
+    best_performance = best_performance
+  ))
 }

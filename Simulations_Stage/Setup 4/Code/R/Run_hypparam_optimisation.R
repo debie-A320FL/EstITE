@@ -18,7 +18,7 @@ library(causalToolbox)
 library(nnet)
 
 
-source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Code/R/function_RF_optimisation.R")
+source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Code/R/function_hypparam_optimisation.R")
 
 BScore <- function(x, y) mean((100*x - 100*y)^2)
 bias <- function(x, y) mean(100*x - 100*y)
@@ -73,6 +73,47 @@ test_augmX = res_train_test$test_augmX; z_test = res_train_test$z_test; y_test =
 Test_CATT = res_train_test$Test_CATT
 
 
+cat("\n\n\n\n")
+print("rlasso without opti")
+start_time <- Sys.time()
+model <- rlasso(x = train_augmX[, -ncol(train_augmX)], w = z_train, y = y_train,
+                     lambda_choice = "lambda.min", rs = FALSE)
+
+end_time <- Sys.time()
+execution_time <- end_time - start_time
+print("rlasso_execution_time : ")
+print(execution_time)
+test_est = predict(model, test_augmX[,-ncol(test_augmX)])
+CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
+print("Perf on test data")
+print(CATT_Test_PEHE)
+
+
+cat("\n\n\n\n")
+print("rlasso")
+start_time <- Sys.time()
+result <- optimize_and_evaluate_rlasso(
+  train_augmX[,-ncol(train_augmX)], z_train, y_train, val_augmX[,-ncol(val_augmX)], z_val, y_val,
+  val_CATT, verbose=FALSE
+)
+
+end_time <- Sys.time()
+execution_time <- end_time - start_time
+print("rlasso_execution_time : ")
+print(execution_time)
+best_perf <- result$best_performance
+print("best perf on validation")
+print(best_perf)
+model <- result$best_model
+test_est = predict(model, test_augmX[,-ncol(test_augmX)])
+CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
+print("Perf on test data")
+print(CATT_Test_PEHE)
+best_alpha <- result$best_alpha
+print("best alpha")
+print(best_alpha)
+
+
 
 cat("\nS_RF\n")
 start_time_RF2 <- Sys.time()
@@ -122,7 +163,7 @@ cat("\n\n\n\n")
 print("X_RF")
 start_time_RF <- Sys.time()
 result <- optimize_and_evaluate_X_RF(
-  train_augmX, z_train, y_train, val_augmX, z_val, y_val,
+  train_augmX[,-ncol(train_augmX)], z_train, y_train, val_augmX[,-ncol(val_augmX)], z_val, y_val,
   val_CATT, verbose=FALSE
 )
 
@@ -134,7 +175,7 @@ best_perf <- result$best_performance
 print("best perf on validation")
 print(best_perf)
 model <- result$best_model
-test_est = EstimateCate(model, test_augmX)
+test_est = EstimateCate(model, test_augmX[,-ncol(test_augmX)])
 CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
 print("Perf on test data")
 print(CATT_Test_PEHE)

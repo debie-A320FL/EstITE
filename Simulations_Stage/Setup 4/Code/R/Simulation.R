@@ -61,7 +61,7 @@ if (!require("nnet")) {
 library(nnet)
 # library(forestry)
 
-source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Code/R/function_RF_optimisation.R")
+source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Code/R/function_hypparam_optimisation.R")
 
 availableCores() # 8 processes in total
 plan(multisession)  # use future() to assign and value() function to block subsequent evaluations
@@ -103,7 +103,7 @@ res_val = prepare_train_data(data = data_validation, hyperparams = hyperparams,
 val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
 val_CATT = res_val$Test_CATT
 
-list_size <- c(500)
+list_size <- c(1000)
 for (size_sample in list_size) {
 
   print(paste("size_sample =", size_sample))
@@ -113,12 +113,9 @@ for (size_sample in list_size) {
   ### OPTIONS
   B = 3   # Num of Simulations
 
-
-  # MLearner without RF one (which do not run)
-  #MLearners = c('S-BART','T-BART','X-BART',
-  #              'R-LASSO', 'R-BOOST', 'CF', 'BCF',"S-RF","T-RF","X-RF")
-
-  MLearners = c('R-LASSO',"S-RF","T-RF","X-RF", "S-RF-opti", "T-RF-opti", "X-RF-opti")
+  MLearners = c('R-LASSO',"S-RF","T-RF","X-RF",
+                  "S-RF-opti", "T-RF-opti", "X-RF-opti",
+                  "R-LASSO-opti")
 
   nb_learner = length((MLearners))
 
@@ -173,7 +170,7 @@ for (size_sample in list_size) {
     
     end_time <- Sys.time()
     execution_time <- end_time - start_time
-    Liste_time$execution_time[i, 'S-RF'] = execution_time
+    Liste_time$execution_time[i, 'S-RF'] = as.numeric(execution_time, units = "secs")
 
     cat("\n\nS-RF_execution_time : ")
     print(execution_time)
@@ -201,7 +198,7 @@ for (size_sample in list_size) {
     train_est = EstimateCate(SRF, train_augmX)
     test_est = EstimateCate(SRF, test_augmX)
   
-    Liste_time$execution_time[i, 'S-RF-opti'] = execution_time
+    Liste_time$execution_time[i, 'S-RF-opti'] = as.numeric(execution_time, units = "secs")
 
     cat("\n\nS-RF-opti_execution_time : ")
     print(execution_time)
@@ -226,7 +223,7 @@ for (size_sample in list_size) {
     
     end_time <- Sys.time()
     execution_time <- end_time - start_time
-    Liste_time$execution_time[i, 'T-RF'] = execution_time
+    Liste_time$execution_time[i, 'T-RF'] = as.numeric(execution_time, units = "secs")
 
     cat("\n\nT-RF_execution_time : ")
     print(execution_time)
@@ -253,7 +250,7 @@ for (size_sample in list_size) {
     
     end_time <- Sys.time()
     execution_time <- end_time - start_time
-    Liste_time$execution_time[i, 'T-RF-opti'] = execution_time
+    Liste_time$execution_time[i, 'T-RF-opti'] = as.numeric(execution_time, units = "secs")
 
     cat("\n\nT-RF-opti_execution_time : ")
     print(execution_time)
@@ -277,7 +274,7 @@ for (size_sample in list_size) {
     
     end_time <- Sys.time()
     execution_time <- end_time - start_time
-    Liste_time$execution_time[i, 'X-RF'] = execution_time
+    Liste_time$execution_time[i, 'X-RF'] = as.numeric(execution_time, units = "secs")
 
     cat("\n\nX-RF_execution_time : ")
     print(execution_time)
@@ -295,8 +292,8 @@ for (size_sample in list_size) {
     # # Remove propensity score
     start_time <- Sys.time()
     XRF_result <- optimize_and_evaluate_X_RF(
-      train_augmX, z_train, y_train, val_augmX, z_val, y_val,
-      val_CATT, verbose=TRUE
+      train_augmX[,-ncol(train_augmX)], z_train, y_train, val_augmX[,-ncol(val_augmX)], z_val, y_val,
+      val_CATT, verbose=FALSE
     )
     XRF = XRF_result$best_model
     train_est = EstimateCate(XRF, train_augmX[,-ncol(train_augmX)])
@@ -304,7 +301,7 @@ for (size_sample in list_size) {
     
     end_time <- Sys.time()
     execution_time <- end_time - start_time
-    Liste_time$execution_time[i, 'X-RF-opti'] = execution_time
+    Liste_time$execution_time[i, 'X-RF-opti'] = as.numeric(execution_time, units = "secs")
 
     cat("\n\nX-RF-opti_execution_time : ")
     print(execution_time)
@@ -333,7 +330,7 @@ for (size_sample in list_size) {
     
     end_time <- Sys.time()
     execution_time <- end_time - start_time
-    Liste_time$execution_time[i, 'R-LASSO'] = execution_time
+    Liste_time$execution_time[i, 'R-LASSO'] = as.numeric(execution_time, units = "secs")
 
     cat("\n\nR-Lasso_execution_time : ")
     print(execution_time)
@@ -345,7 +342,42 @@ for (size_sample in list_size) {
     print("Perf on test data")
     print(Results$CATT_Test_PEHE[i, 'R-LASSO'])
 
-    rm(RLASSO)    
+    rm(RLASSO)
+
+
+    ######################## R-Lasso Regression with opti
+    # No estimated PS as 
+    start_time <- Sys.time()
+    
+    result <- optimize_and_evaluate_rlasso(
+      train_augmX[,-ncol(train_augmX)], z_train, y_train, val_augmX[,-ncol(val_augmX)], z_val, y_val,
+      val_CATT, verbose=FALSE
+    )
+    RLASSO <- result$best_model
+    train_est = predict(RLASSO, train_augmX[, -ncol(train_augmX)])
+    test_est = predict(RLASSO, test_augmX[, -ncol(train_augmX)])
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'R-LASSO-opti'] = as.numeric(execution_time, units = "secs")
+
+    cat("\n\nR-LASSO-opti_execution_time : ")
+    print(execution_time)
+    
+    # CATT 
+    Results$CATT_Test_Bias[i, 'R-LASSO-opti'] = bias(Test_CATT, test_est[z_test == 1])
+    Results$CATT_Test_PEHE[i, 'R-LASSO-opti'] = PEHE(Test_CATT, test_est[z_test == 1])
+    
+    print("Perf on test data")
+    print(Results$CATT_Test_PEHE[i, 'R-LASSO-opti'])
+
+    rm(result)
+    rm(RLASSO)
+
+
+
+
+
   }
   
 )
@@ -364,8 +396,11 @@ print(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ))
 #print(sapply( names(Liste_time), function(x) apply(Liste_time[[x]], 2, function(y) MC_se(y, B)) ))
 
 
-# Save Results --------------------------------------------------
+cat("\n\n\n")
 
+
+# Save Results --------------------------------------------------
+fac = 1
 directory_path <- "./Results"
 
 if (!dir.exists(directory_path)) {
