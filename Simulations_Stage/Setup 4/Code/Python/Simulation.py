@@ -15,7 +15,7 @@ from scipy import stats as sts
 import sys
 setup_1_models_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../Setup 1a/Code/Python'))
 # print(setup_1_models_path)
-# sys.path.append(setup_1_models_path)
+sys.path.append(setup_1_models_path)
 
 from models.causal_models import CMGP
 
@@ -38,14 +38,14 @@ def r_loss(y, mu, z, pi, tau):
 
 
 # Options
-B = 3  # Num of simulations
+B = 80  # Num of simulations
 
 # Load AIDS data
 #basedir = str(Path(os.getcwd()).parents[2])
 # Utilisation des données de setup 1
 basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
-N_size = [500,1000,5000,10000]
+N_size = [1000, 2000, 3000, 5000, 10000]
 
 for N in N_size:
     print(f"N = {N}")
@@ -132,11 +132,11 @@ for N in N_size:
 
     # Results storage
     # esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE', 'RLOSS']
-    esti = ['CATT', 'CATC']; subs = ['Train', 'Test']; loss = ['Bias', 'PEHE'] # RLOSS not stored atm
+    esti = ['CATT']; subs = ['Test']; loss = ['Bias', 'PEHE'] # RLOSS not stored atm
 
     Results = {}
-    for i in range(2):
-        for k in range(2):
+    for i in range(1):
+        for k in range(1):
             for j in loss:
                 dest = {'%s_%s_%s' % (esti[i], subs[k], j): np.zeros((B, 3))}
                 Results.update(dest)
@@ -183,7 +183,7 @@ for N in N_size:
         # 1) CMGP
         
         start_time = time.time()
-        myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF', backend="gpy")
+        myCMGP = CMGP(dim=P, mode="CMGP", mod='Multitask', kern='RBF')
         myCMGP.fit(X=x_train, Y=y_train, W=z_train)
 
         train_CMGP_est = myCMGP.predict(x_train)[0]
@@ -192,30 +192,20 @@ for N in N_size:
         end_time = time.time()
         execution_time = end_time - start_time
         Time[i,0] = execution_time
-        print(f"\nCMGP_predict_time : {execution_time}")
+        print(f"\nCMGP_predict_time : {round(execution_time,3)}")
 
         # CATT
-        Results['CATT_Train_Bias'][i, 0] = bias(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
-        Results['CATT_Train_PEHE'][i, 0] = PEHE(CATT_Train, train_CMGP_est.reshape(-1)[z_train == 1])
 
         Results['CATT_Test_Bias'][i, 0] = bias(CATT_Test, test_CMGP_est.reshape(-1)[z_test == 1])
         Results['CATT_Test_PEHE'][i, 0] = PEHE(CATT_Test, test_CMGP_est.reshape(-1)[z_test == 1])
 
-        # CATC
-        Results['CATC_Train_Bias'][i, 0] = bias(CATC_Train, train_CMGP_est.reshape(-1)[z_train == 0])
-        Results['CATC_Train_PEHE'][i, 0] = PEHE(CATC_Train, train_CMGP_est.reshape(-1)[z_train == 0])
+        print('CATT_Test_PEHE_CMGP')
+        print(Results['CATT_Test_PEHE'][i, 0])
 
-        Results['CATC_Test_Bias'][i, 0] = bias(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
-        Results['CATC_Test_PEHE'][i, 0] = PEHE(CATC_Test, test_CMGP_est.reshape(-1)[z_test == 0])
 
-        end_time = time.time()
-        execution_time = end_time - start_time
-        #print(f"CMGP_predic_and_biais_pehe_time : {execution_time}")
-        
-        
         # 2) NSGP
         start_time = time.time()
-        myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern', backend="gpy")
+        myNSGP = CMGP(dim=P, mode="NSGP", mod='Multitask', kern='Matern')
         myNSGP.fit(X=x_train, Y=y_train, W=z_train)
 
         train_NSGP_est = myNSGP.predict(x_train)[0]
@@ -223,26 +213,15 @@ for N in N_size:
 
         end_time = time.time()
         execution_time = end_time - start_time
-        print(f"NSGP_predict_time : {execution_time}")
+        print(f"\nNSGP_predict_time : {round(execution_time,3)}")
         Time[i,1] = execution_time
 
         # CATT
-        Results['CATT_Train_Bias'][i, 1] = bias(CATT_Train, train_NSGP_est.reshape(-1)[z_train == 1])
-        Results['CATT_Train_PEHE'][i, 1] = PEHE(CATT_Train, train_NSGP_est.reshape(-1)[z_train == 1])
-
         Results['CATT_Test_Bias'][i, 1] = bias(CATT_Test, test_NSGP_est.reshape(-1)[z_test == 1])
         Results['CATT_Test_PEHE'][i, 1] = PEHE(CATT_Test, test_NSGP_est.reshape(-1)[z_test == 1])
 
-        # CATC
-        Results['CATC_Train_Bias'][i, 1] = bias(CATC_Train, train_NSGP_est.reshape(-1)[z_train == 0])
-        Results['CATC_Train_PEHE'][i, 1] = PEHE(CATC_Train, train_NSGP_est.reshape(-1)[z_train == 0])
-
-        Results['CATC_Test_Bias'][i, 1] = bias(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
-        Results['CATC_Test_PEHE'][i, 1] = PEHE(CATC_Test, test_NSGP_est.reshape(-1)[z_test == 0])
-
-        end_time = time.time()
-        execution_time = end_time - start_time
-        #print(f"NSGP_predic_and_biais_pehe_time : {execution_time}")
+        print('CATT_Test_PEHE_NSGP')
+        print(Results['CATT_Test_PEHE'][i, 1])
 
         # 3) Logistic Regression with Interaction Terms using patsy
         # Create DataFrames for train and test sets
@@ -263,10 +242,6 @@ for N in N_size:
         # Create design matrices
         y_train_patsy, X_train_patsy = patsy.dmatrices(formula, df_train, return_type='dataframe')
         y_test_patsy, X_test_patsy = patsy.dmatrices(formula, df_test, return_type='dataframe')
-
-        end_time = time.time()
-        execution_time = end_time - start_time
-        #print(f"\nlogit_preparation_time : {execution_time}")
 
         # start_time = time.time()
         # Fit logistic regression model
@@ -303,56 +278,40 @@ for N in N_size:
         end_time = time.time()
         execution_time = end_time - start_time
         Time[i,2] = execution_time
-        print(f"logit_predict_time : {execution_time}")
+        print(f"\nlogit_predict_time : {round(execution_time,3)}")
 
         # CATT
-        Results['CATT_Train_Bias'][i, 2] = bias(CATT_Train, train_logit_est[z_train == 1])
-        Results['CATT_Train_PEHE'][i, 2] = PEHE(CATT_Train, train_logit_est[z_train == 1])
-
         Results['CATT_Test_Bias'][i, 2] = bias(CATT_Test, test_logit_est[z_test == 1])
         Results['CATT_Test_PEHE'][i, 2] = PEHE(CATT_Test, test_logit_est[z_test == 1])
 
-        # CATC
-        Results['CATC_Train_Bias'][i, 2] = bias(CATC_Train, train_logit_est[z_train == 0])
-        Results['CATC_Train_PEHE'][i, 2] = PEHE(CATC_Train, train_logit_est[z_train == 0])
+        print('CATT_Test_PEHE_logit')
+        print(Results['CATT_Test_PEHE'][i, 2])
 
-        Results['CATC_Test_Bias'][i, 2] = bias(CATC_Test, test_logit_est[z_test == 0])
-        Results['CATC_Test_PEHE'][i, 2] = PEHE(CATC_Test, test_logit_est[z_test == 0])
-
-        end_time = time.time()
-        execution_time = end_time - start_time
-        #print(f"logit_predic_and_biais_pehe_time : {execution_time}")
-
-
-    # elapsed = time.time() - start
-    # print("\n\nElapsed time (in h) is", round(elapsed/3600, 2)) # 2h for B=100
 
     models = ['CMGP', 'NSGP', 'Logistic']
     summary = {}
 
-    # print(Time)
-
     # Convert to DataFrame
-    df = pd.DataFrame(Time, columns=models)
+    df_time = pd.DataFrame(Time, columns=models)
     # print(df)
 
 
     # Export to CSV
     
-    df.to_csv(os.path.join(results_dir,f'Time_Nsize_{N}_B_{B}.csv'), index=False)
+    df_time.to_csv(os.path.join(results_dir,f'Time_Nsize_{N}_B_{B}.csv'), index=False)
     
     
     print("Mean execution Time:")
-    print(df.mean())
+    print(df_time.mean())
 
     for name in Results.keys():
         PD_results = pd.DataFrame(Results[name], columns=models)
         
         PD_results.to_csv(os.path.join(results_dir, "GP_%s_%s_Nsize_%s_fac_%s.csv" % (B, name, N, fac)), index=False, header=True)
 
-        aux = {name: {'CMGP': np.c_[round(np.mean(PD_results['CMGP']),4), round(MC_se(PD_results['CMGP'], B),4)],
-                    'NSGP': np.c_[round(np.mean(PD_results['NSGP']),4), round(MC_se(PD_results['NSGP'], B),4)],
-                    'Logistic': np.c_[round(np.mean(PD_results['Logistic']),4), round(MC_se(PD_results['Logistic'], B),4)]}}
+        aux = {name: {'CMGP': np.c_[round(np.mean(PD_results['CMGP']),3), round(MC_se(PD_results['CMGP'], B),3)],
+                    'NSGP': np.c_[round(np.mean(PD_results['NSGP']),3), round(MC_se(PD_results['NSGP'], B),3)],
+                    'Logistic': np.c_[round(np.mean(PD_results['Logistic']),3), round(MC_se(PD_results['Logistic'], B),3)]}}
         summary.update(aux)
 
     print(pd.DataFrame(summary).T)
