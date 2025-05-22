@@ -103,7 +103,8 @@ res_val = prepare_train_data(data = data_validation, hyperparams = hyperparams,
 val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
 val_CATT = res_val$Test_CATT
 
-list_size <- c(1000, 2000, 3000, 5000, 10000)
+#list_size <- c(1000, 2000, 3000, 5000, 10000)
+list_size <- c(3000, 5000, 10000)
 for (size_sample in list_size) {
 
   print(paste("size_sample =", size_sample))
@@ -140,7 +141,7 @@ for (size_sample in list_size) {
     
     gc()
     
-    cat("\n*** Iteration", i, " - size sample : ",size_sample, "\n")
+    cat("\n\n***** Iteration", i, " - size sample : ",size_sample, "*****")
     
     
     if(i<=500){set.seed(502 + i*5); seed = 502 + i*5}
