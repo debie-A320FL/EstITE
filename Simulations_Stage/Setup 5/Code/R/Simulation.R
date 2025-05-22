@@ -61,7 +61,7 @@ if (!require("nnet")) {
 library(nnet)
 # library(forestry)
 
-source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Code/R/function_hypparam_optimisation.R")
+source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5/Code/R/function_hypparam_optimisation.R")
 
 availableCores() # 8 processes in total
 plan(multisession)  # use future() to assign and value() function to block subsequent evaluations
@@ -96,23 +96,25 @@ data_train_test <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 
 data_validation <- read.csv("./../Setup 1a/Data/simulated_10K_data_validation.csv")
 size_sample_val = nrow(data_validation)
-res_val = prepare_train_data(data = data_validation, hyperparams = hyperparams,
+
+size_sample = 10000
+
+list_treatment_percentile <- c(35, 25, 15, 10, 5, 3, 2, 1)
+for (treatment_percentile in list_treatment_percentile) {
+
+  print(paste("treatment_percentile =", treatment_percentile))
+
+  res_val = prepare_train_data(data = data_validation, hyperparams = hyperparams,
                             size_sample = size_sample_val,
-                            train_ratio = 0)
+                            train_ratio = 0, treatment_percentile = treatment_percentile)
 
-val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
-val_CATT = res_val$Test_CATT
-
-#list_size <- c(1000, 2000, 3000, 5000, 10000)
-list_size <- c(3000, 5000, 10000)
-for (size_sample in list_size) {
-
-  print(paste("size_sample =", size_sample))
+  val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
+  val_CATT = res_val$Test_CATT
   
   # Estimation --------------------------------------------------------------
 
   ### OPTIONS
-  B = 80   # Num of Simulations
+  B = 7   # Num of Simulations
 
   MLearners = c('R-LASSO',"S-RF","T-RF","X-RF",
                   "S-RF-opti", "T-RF-opti", "X-RF-opti",
@@ -141,7 +143,7 @@ for (size_sample in list_size) {
     
     gc()
     
-    cat("\n\n***** Iteration", i, " - size sample : ",size_sample, "*****")
+    cat("\n\n***** Iteration", i, " - treatment_percentile : ",treatment_percentile, "*****")
     
     
     if(i<=500){set.seed(502 + i*5); seed = 502 + i*5}
@@ -152,7 +154,7 @@ for (size_sample in list_size) {
     size_sample_train_test = size_sample
     res_train_test = prepare_train_data(data = data_train_test, hyperparams = hyperparams,
                                         size_sample = size_sample_train_test,
-                                        train_ratio = 0.7, seed = seed)
+                                        train_ratio = 0.7, seed = seed, treatment_percentile = treatment_percentile)
 
     train_augmX = res_train_test$train_augmX; z_train = res_train_test$z_train; y_train = res_train_test$y_train
     test_augmX = res_train_test$test_augmX; z_test = res_train_test$z_test; y_test = res_train_test$y_test
@@ -406,17 +408,17 @@ if (!dir.exists(directory_path)) {
  invisible(
    sapply(names(Results), 
           function(x) write.csv(Results[[x]], 
-                                file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_fac_",fac, "_Nsize_",size_sample,".csv") ) )
+                                file=paste0(getwd(), "/Results/Logit_", B, "_", x, "_treat_p_",treatment_percentile, "_Nsize_",size_sample,".csv") ) )
  )
 
 
  write.csv(sapply( names(Results), function(x) colMeans(Results[[x]]) ), 
-           file = paste0(getwd(), "/Results/MeanSummary_", B, "_fac_",fac, "_Nsize_",size_sample,".csv"))
+           file = paste0(getwd(), "/Results/MeanSummary_", B, "_treat_p_",treatment_percentile, "_Nsize_",size_sample,".csv"))
  
  write.csv(sapply( names(Results), function(x) apply(Results[[x]], 2, function(y) MC_se(y, B)) ), 
-           file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
+           file = paste0(getwd(), "/Results/MCSE_Summary_", B, "_treat_p_",treatment_percentile, "_Nsize_",size_sample, ".csv"))
 
- write.csv(Liste_time$execution_time, file = paste0(getwd(), "/Results/Execution time_R_", B, "_fac_",fac, "_Nsize_",size_sample, ".csv"))
+ write.csv(Liste_time$execution_time, file = paste0(getwd(), "/Results/Execution time_R_", B, "_treat_p_",treatment_percentile, "_Nsize_",size_sample, ".csv"))
 
 
 }

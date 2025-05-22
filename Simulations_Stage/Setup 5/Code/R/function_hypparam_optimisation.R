@@ -750,7 +750,8 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
   ))
 }
 
-prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_ratio = 0.7, treatment_percentile = 35){
+prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_ratio = 0.7,
+                                treatment_percentile = 35){
   set.seed(seed)
 
   data = data[sample(nrow(data)),]
@@ -759,9 +760,9 @@ prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_r
   #print(size_sample)
   data = data[1:size_sample,]
 
-  # Extraire les variables nécessaires
-  myZ <- data$treatment
+  myX <- data %>% select(-treatment, -Y) %>% as.matrix()
   
+  # beta_values to change the treatment ratio, based on trial and error
   beta_values <- list(
     `35` = -3.5,
     `25` = -3,
@@ -772,10 +773,16 @@ prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_r
     `2` = -0.15,
     `1` = 0.6
   )
-  
-  
-  # myY <- data$Y
-  myX <- data %>% select(-treatment, -Y) %>% as.matrix()
+
+  if (!(as.character(treatment_percentile) %in% names(beta_values))) {
+    stop("Error: Invalid percentage. Please enter one of the following: ", paste(names(beta_values), collapse = ", "))
+  }
+
+  beta_0 = beta_values[[as.character(treatment_percentile)]]
+
+  # Calculer la probabilité de traitement
+  prob_treatment <- 1 / (1 + exp(-(beta_0 + hyperparams$beta_1 * myX[, "age"] + hyperparams$beta_2 * myX[, "weight"] + hyperparams$beta_3 * myX[, "comorbidities"] + hyperparams$beta_4 * myX[, "gender"])))
+  myZ <- rbinom(size_sample, 1, prob_treatment)
 
   # Calculer mu_0, tau, et ITE
   mu_0 <- hyperparams$gamma_0 + hyperparams$gamma_1 * myX[, "age"] + hyperparams$gamma_2 * myX[, "weight"] + hyperparams$gamma_3 * myX[, "comorbidities"] + hyperparams$gamma_4 * myX[, "gender"]
