@@ -250,3 +250,62 @@ for (i in 1:10){
 # }
 
 
+find_optimal_beta_0 <- function(target_proportion, n = 1e6, max_iter = 100) {
+  # Initial guesses for the search range
+  beta_0_low <- -1
+  beta_0_high <- 1
+  tolerance = target_proportion/100
+
+  if (!(target_proportion < 1 & target_proportion > 0)){
+    stop("target_proportion should be strictly between 0 and 1")
+  }
+
+  # Expand the search range if the initial range does not bracket the target proportion
+  while (TRUE) {
+    data_low <- generate_data(n = n, beta_0 = beta_0_low)
+    proportion_low <- mean(data_low$treatment == 0)
+
+    data_high <- generate_data(n = n, beta_0 = beta_0_high)
+    proportion_high <- mean(data_high$treatment == 0)
+
+    if (proportion_low > target_proportion && proportion_high < target_proportion) {
+      break
+    } else {
+      if (proportion_low > target_proportion) {
+        beta_0_high <- beta_0_high * 2
+        #print("high")
+      } else {
+        beta_0_low <- beta_0_low * 2
+        #print("low")
+      }
+    }
+  }
+
+  # Binary search algorithm
+  iter <- 0
+  while (beta_0_high - beta_0_low > tolerance && iter < max_iter) {
+    beta_0_mid <- (beta_0_low + beta_0_high) / 2
+    data <- generate_data(n = n, beta_0 = beta_0_mid)
+    current_proportion <- mean(data$treatment == 0)
+    #print(current_proportion)
+
+    if (abs(current_proportion - target_proportion) < tolerance) {
+      break
+    } else if (current_proportion < target_proportion) {
+      beta_0_high <- beta_0_mid
+    } else {
+      beta_0_low <- beta_0_mid
+    }
+
+    iter <- iter + 1
+  }
+
+  # The optimal beta_0 is approximately beta_0_mid
+  optimal_beta_0 <- beta_0_mid
+  return(optimal_beta_0)
+}
+
+# Example usage:
+target_proportion <- 0.01  # Example target proportion
+optimal_beta_0 <- find_optimal_beta_0(target_proportion)
+print(paste("Optimal beta_0:", optimal_beta_0))
