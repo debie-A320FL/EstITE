@@ -1,4 +1,8 @@
 # Charger les bibliothèques nécessaires
+if (!require("dplyr")) {
+  install.packages("dplyr")
+}
+
 library(dplyr)
 
 curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
@@ -181,6 +185,42 @@ mean(data$treatment == 0)
 
 for (i in 1:10){
   data <- generate_data(n = 1e6, beta_0 = 0.6, seed = i)
+  mean(data$treatment == 0) %>% print()
+}
+
+# Data 0.5%
+data <- generate_data(n = 1e6, beta_0 = 1.2)
+mean(data$treatment == 0)
+
+for (i in 1:10){
+  data <- generate_data(n = 1e6, beta_0 = 1.2, seed = i)
+  mean(data$treatment == 0) %>% print()
+}
+
+# Data 0.3%
+data <- generate_data(n = 1e6, beta_0 = 1.7)
+mean(data$treatment == 0)
+
+for (i in 1:10){
+  data <- generate_data(n = 1e6, beta_0 = 1.7, seed = i)
+  mean(data$treatment == 0) %>% print()
+}
+
+# Data 0.2%
+data <- generate_data(n = 1e6, beta_0 = 2.1)
+mean(data$treatment == 0)
+
+for (i in 1:10){
+  data <- generate_data(n = 1e6, beta_0 = 2.1, seed = i)
+  mean(data$treatment == 0) %>% print()
+}
+
+# Data 0.1%
+data <- generate_data(n = 1e6, beta_0 = 2.8)
+mean(data$treatment == 0)
+
+for (i in 1:10){
+  data <- generate_data(n = 1e6, beta_0 = 2.8, seed = i)
   mean(data$treatment == 0) %>% print()
 }
 
