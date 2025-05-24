@@ -1,4 +1,8 @@
 # Charger les bibliothèques nécessaires
+if (!require("dplyr")) {
+  install.packages("dplyr")
+}
+
 library(dplyr)
 
 #curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)

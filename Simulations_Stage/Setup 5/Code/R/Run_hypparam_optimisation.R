@@ -13,9 +13,16 @@ if (!require("nnet")) {
   install.packages("nnet")
 }
 
+# Install rlearner from GitHub if not already installed
+if (!require("rlearner")) {
+  devtools::install_github("xnie/rlearner", upgrade = "never")
+}
+
+
 library(tidyverse)
 library(causalToolbox)
 library(nnet)
+library(rlearner)
 
 
 source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5/Code/R/function_hypparam_optimisation.R")
@@ -91,6 +98,7 @@ print(CATT_Test_PEHE)
 }
 
 
+if (0){
 cat("\n\n\n\n")
 print("rlasso")
 start_time <- Sys.time()
@@ -114,9 +122,41 @@ print(CATT_Test_PEHE)
 best_alpha <- result$best_alpha
 print("best alpha")
 print(best_alpha)
+}
 
+param_grid <- expand.grid(
+    sample.fraction =c(0.05,0.1, 0.15, 0.2),  # Fraction of samples used for each tree
+    ntree = c(1000, 3000, 5000),  # Number of trees
+    mtry = c(2),  # Features to try at each split
+    nodesizeSpl = c(10, 15,20, 25, 30, 35),  # Minimum node size for splits
+    nodesizeAvg = c(10, 15,20, 25, 30, 35)  # Minimum node size for averages
+  )
 
+cat("\nS_RF (hand)\n")
+start_time_RF2 <- Sys.time()
+result <- optimize_and_evaluate_S_RF(
+  train_augmX, z_train, y_train, val_augmX, z_val, y_val,
+  val_CATT, verbose=TRUE, param_grid=param_grid
+)
 
+end_time_RF2 <- Sys.time()
+execution_time_RF2 <- end_time_RF2 - start_time_RF2
+print("S-RF_execution_time : ")
+print(execution_time_RF2)
+
+all_perf <- result$all_performances
+print(all_perf)
+
+best_perf <- result$best_performance
+print("best perf on validation")
+print(best_perf)
+model <- result$best_model
+test_est = EstimateCate(model, test_augmX)
+CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
+print("Perf on test data")
+print(CATT_Test_PEHE)
+
+if (0){
 cat("\nS_RF\n")
 start_time_RF2 <- Sys.time()
 result <- optimize_and_evaluate_S_RF_2(
@@ -199,3 +239,4 @@ test_est = EstimateCate(model, test_augmX[,-ncol(test_augmX)])
 CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
 print("Perf on test data")
 print(CATT_Test_PEHE)
+}

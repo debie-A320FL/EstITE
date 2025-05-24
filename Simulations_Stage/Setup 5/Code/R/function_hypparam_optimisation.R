@@ -1,10 +1,11 @@
 source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5/Code/R/Sample_creation.R")
 
 optimize_and_evaluate_S_RF <- function(train_augmX, z_train, y_train, test_augmX, z_test, y_test,
-                                     Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
+                                     Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE,param_grid= NULL){
   print("starting...")
 
   # Define the hyperparameter grid to search
+  if (is.null(param_grid)){
   param_grid <- expand.grid(
     ntree = c(300,500,1000),  # Number of trees
     mtry = c(1, 2, 3, 4),  # Features to try at each split
@@ -12,6 +13,7 @@ optimize_and_evaluate_S_RF <- function(train_augmX, z_train, y_train, test_augmX
     nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),  # Minimum node size for averages
     sample.fraction =c(0.1, 0.2, 0.3, 0.4, 0.5)  # Fraction of samples used for each tree
   )
+  }
 
   # Initialize variables to store best parameters and performance
   best_params <- NULL
