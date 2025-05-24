@@ -18,7 +18,7 @@ library(causalToolbox)
 library(nnet)
 
 
-source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 4/Code/R/function_hypparam_optimisation.R")
+source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5/Code/R/function_hypparam_optimisation.R")
 
 BScore <- function(x, y) mean((100*x - 100*y)^2)
 bias <- function(x, y) mean(100*x - 100*y)
@@ -61,18 +61,19 @@ val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
 val_CATT = res_val$Test_CATT
 
 
-size_sample_train_test = 500
+size_sample_train_test = 10000
 print("size_sample_train_test")
 print(size_sample_train_test)
 res_train_test = prepare_train_data(data = data_train_test, hyperparams = hyperparams,
                                     size_sample = size_sample_train_test,
-                                    train_ratio = 0.7, seed = seed)
+                                    train_ratio = 0.7, seed = seed, verbose = TRUE)
 
 train_augmX = res_train_test$train_augmX; z_train = res_train_test$z_train; y_train = res_train_test$y_train
 test_augmX = res_train_test$test_augmX; z_test = res_train_test$z_test; y_test = res_train_test$y_test
 Test_CATT = res_train_test$Test_CATT
 
 
+if (0){
 cat("\n\n\n\n")
 print("rlasso without opti")
 start_time <- Sys.time()
@@ -87,6 +88,7 @@ test_est = predict(model, test_augmX[,-ncol(test_augmX)])
 CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
 print("Perf on test data")
 print(CATT_Test_PEHE)
+}
 
 
 cat("\n\n\n\n")
@@ -134,6 +136,24 @@ test_est = EstimateCate(model, test_augmX)
 CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
 print("Perf on test data")
 print(CATT_Test_PEHE)
+
+print(result$best_params)
+
+SRF <- S_RF(train_augmX, z_train, y_train, mu.forestry = SRF_result$best_params)
+
+SRF <- S_RF(train_augmX, z_train, y_train,
+            mu.forestry = list(
+              ntree = result$best_params$ntree,
+              replace = result$best_params$replace,
+              sample.fraction = result$best_params$sample.fraction,
+              mtry = result$best_params$mtry,
+              nodesizeSpl = result$best_params$nodesizeSpl,
+              nodesizeAvg = result$best_params$nodesizeAvg,
+              splitratio = result$best_params$splitratio,
+              middleSplit = result$best_params$middleSplit
+            ))
+
+model <- SRF
 
 
 

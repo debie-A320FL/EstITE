@@ -1,8 +1,8 @@
 # Charger les bibliothèques nécessaires
 library(dplyr)
 
-curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
-setwd(curr_dir); setwd('./../../Data')
+#curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
+#setwd(curr_dir); setwd('./../../Data')
 
 
 # Fonction pour générer les données
@@ -111,102 +111,67 @@ export_data_to_csv <- function(data, file_name = "simulated_data.csv", directory
   }
 }
 
-# Data 35%
-data <- generate_data(n = 1e6, beta_0 = -3.5)
-mean(data$treatment == 0)
+find_optimal_beta_0 <- function(target_proportion, n = 1e6, max_iter = 100) {
+  # Initial guesses for the search range
+  beta_0_low <- -1
+  beta_0_high <- 1
+  tolerance = target_proportion/100
 
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = -3.5, seed = i)
-  mean(data$treatment == 0) %>% print()
+  if (!(target_proportion < 1 & target_proportion > 0)){
+    stop("target_proportion should be strictly between 0 and 1")
+  }
+
+  # Expand the search range if the initial range does not bracket the target proportion
+  while (TRUE) {
+    data_low <- generate_data(n = n, beta_0 = beta_0_low)
+    proportion_low <- mean(data_low$treatment == 0)
+
+    data_high <- generate_data(n = n, beta_0 = beta_0_high)
+    proportion_high <- mean(data_high$treatment == 0)
+
+    if (proportion_low > target_proportion && proportion_high < target_proportion) {
+      break
+    } else {
+      if (proportion_low > target_proportion) {
+        beta_0_high <- beta_0_high * 2
+        #print("high")
+      } else {
+        beta_0_low <- beta_0_low * 2
+        #print("low")
+      }
+    }
+  }
+
+  # Binary search algorithm
+  iter <- 0
+  while (beta_0_high - beta_0_low > tolerance && iter < max_iter) {
+    beta_0_mid <- (beta_0_low + beta_0_high) / 2
+    data <- generate_data(n = n, beta_0 = beta_0_mid)
+    current_proportion <- mean(data$treatment == 0)
+    #print(current_proportion)
+
+    if (abs(current_proportion - target_proportion) < tolerance) {
+      break
+    } else if (current_proportion < target_proportion) {
+      beta_0_high <- beta_0_mid
+    } else {
+      beta_0_low <- beta_0_mid
+    }
+
+    iter <- iter + 1
+  }
+
+  # The optimal beta_0 is approximately beta_0_mid
+  optimal_beta_0 <- beta_0_mid
+  return(optimal_beta_0)
 }
 
-# Data 25%
-data <- generate_data(n = 1e6, beta_0 = -3)
-mean(data$treatment == 0)
+# Example usage:
+#target_proportion <- 0.01  # Example target proportion
+#optimal_beta_0 <- find_optimal_beta_0(target_proportion)
+#print(paste("Optimal beta_0:", optimal_beta_0))
 
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = -3, seed = i)
-  mean(data$treatment == 0) %>% print()
-}
-
-
-# Data 15%
-data <- generate_data(n = 1e6, beta_0 = -2.35)
-mean(data$treatment == 0)
-
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = -2.35, seed = i)
-  mean(data$treatment == 0) %>% print()
-}
-
-# Data 10%
-data <- generate_data(n = 1e6, beta_0 = -1.9)
-mean(data$treatment == 0)
-
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = -1.9, seed = i)
-  mean(data$treatment == 0) %>% print()
-}
-
-# Data 5%
-data <- generate_data(n = 1e6, beta_0 = -1.15)
-mean(data$treatment == 0)
-
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = -1.15, seed = i)
-  mean(data$treatment == 0) %>% print()
-}
-
-# Data 3%
-data <- generate_data(n = 1e6, beta_0 = -0.6)
-mean(data$treatment == 0)
-
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = -0.6, seed = i)
-  mean(data$treatment == 0) %>% print()
-}
-
-# Data 2%
-data <- generate_data(n = 1e6, beta_0 = -0.15)
-mean(data$treatment == 0)
-
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = -0.15, seed = i)
-  mean(data$treatment == 0) %>% print()
-}
-
-# Data 1%
-data <- generate_data(n = 1e6, beta_0 = 0.6)
-mean(data$treatment == 0)
-
-for (i in 1:10){
-  data <- generate_data(n = 1e6, beta_0 = 0.6, seed = i)
-  mean(data$treatment == 0) %>% print()
-}
 
 # export_data_to_csv(data, file_name = "simulated_data_null_CATE.csv",
 #                    directory = ".",
 #                    overwrite = FALSE)
-
-# # Define the percentages and corresponding beta_0 values
-# percentages <- c(35, 25, 15, 10, 5, 3, 2, 1)
-# beta_0_values <- c(-3.5, -3, -2.35, -1.9, -1.15, -0.6, -0.15, 0.6)
-# 
-# # Loop through each percentage and beta_0 value
-# for (i in 1:length(percentages)) {
-#   percentage <- percentages[i]
-#   beta_0 <- beta_0_values[i]
-#   
-#   # Generate data
-#   data <- generate_data(n = 1e6, beta_0 = beta_0)
-#   
-#   # Calculate the mean of treatment == 0
-#   mean_treatment_0 <- mean(data$treatment == 0)
-#   print(paste("Data", percentage, "%: Mean of treatment == 0 is", mean_treatment_0))
-#   
-#   # Export data to CSV
-#   file_name <- paste0("simulated_data_", percentage, ".csv")
-#   export_data_to_csv(data, file_name = file_name, directory = ".", overwrite = FALSE)
-# }
-
-

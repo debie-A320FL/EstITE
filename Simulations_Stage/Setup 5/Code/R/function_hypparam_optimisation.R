@@ -1,3 +1,5 @@
+source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5/Code/R/Sample_creation.R")
+
 optimize_and_evaluate_S_RF <- function(train_augmX, z_train, y_train, test_augmX, z_test, y_test,
                                      Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
   print("starting...")
@@ -751,7 +753,7 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
 }
 
 prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_ratio = 0.7,
-                                treatment_percentile = 35){
+                                treatment_percentile = 35, verbose = FALSE){
   set.seed(seed)
 
   data = data[sample(nrow(data)),]
@@ -761,24 +763,16 @@ prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_r
   data = data[1:size_sample,]
 
   myX <- data %>% select(-treatment, -Y) %>% as.matrix()
-  
-  # beta_values to change the treatment ratio, based on trial and error
-  beta_values <- list(
-    `35` = -3.5,
-    `25` = -3,
-    `15` = -2.35,
-    `10` = -1.9,
-    `5` = -1.15,
-    `3` = -0.6,
-    `2` = -0.15,
-    `1` = 0.6
-  )
 
-  if (!(as.character(treatment_percentile) %in% names(beta_values))) {
-    stop("Error: Invalid percentage. Please enter one of the following: ", paste(names(beta_values), collapse = ", "))
+  if (verbose){
+    cat("Searching for optimal beta_0")
   }
 
-  beta_0 = beta_values[[as.character(treatment_percentile)]]
+  beta_0 = find_optimal_beta_0(treatment_percentile/100) # transform percentile to proportion
+
+  if (verbose){
+    cat("\nFound beta_0 = ",beta_0, " to match treatment_percentile = ", treatment_percentile)
+  }
 
   # Calculer la probabilité de traitement
   prob_treatment <- 1 / (1 + exp(-(beta_0 + hyperparams$beta_1 * myX[, "age"] + hyperparams$beta_2 * myX[, "weight"] + hyperparams$beta_3 * myX[, "comorbidities"] + hyperparams$beta_4 * myX[, "gender"])))
