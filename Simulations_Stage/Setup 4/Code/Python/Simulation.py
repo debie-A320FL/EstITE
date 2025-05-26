@@ -45,15 +45,16 @@ B = 80  # Num of simulations
 # Utilisation des données de setup 1
 basedir_setup_1 = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a/Data"
 
-N_size = [1000, 2000, 3000, 5000, 10000]
+#N_size = [1000, 2000, 3000, 5000, 10000]
+N_size = [1e4, 5e4, 1e5, 5e5, 1e6]
 
-for N in N_size[1:]:
+for N in N_size:
     print(f"N = {N}")
     data = pd.read_csv(basedir_setup_1 + "/simulated_1M_data.csv")
 
     # The dataset is too large
     # Randomly sample 1000 rows from the DataFrame
-    size_sample = N
+    size_sample = int(N)
     data = data.sample(n=size_sample, random_state=1)  # You can set a random_state for reproducibility
     #AIDS = "/home/onyxia/work/EstITE/Simulations/ACTG/Data/ACTGData.csv"
 
@@ -180,6 +181,7 @@ for N in N_size[1:]:
         CATT_Train = ITE_train[z_train == 1]; CATC_Train = ITE_train[z_train == 0]
         CATT_Test = ITE_test[z_test == 1]; CATC_Test = ITE_test[z_test == 0]
 
+        """
         # 1) CMGP
         
         start_time = time.time()
@@ -222,6 +224,7 @@ for N in N_size[1:]:
 
         print('CATT_Test_PEHE_NSGP')
         print(Results['CATT_Test_PEHE'][i, 1])
+        """
 
         # 3) Logistic Regression with Interaction Terms using patsy
         # Create DataFrames for train and test sets
