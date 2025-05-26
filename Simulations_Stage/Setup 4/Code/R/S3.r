@@ -130,17 +130,50 @@ push_files_to_S3_with_nested_folders <- function(bucket_name = "debie",
   print("End of the push")
 }
 
-
 # Specify the local directory containing the CSV files and nested folders
-local_dir <- "/home/onyxia/work/EstITE/Simulations_Stage/"
+local_dir <- "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1a"
 
 # Specify the base S3 "folder" path
-s3_base_folder <- "Simulations_Stage/"
+s3_base_folder <- "Simulations_Stage/Setup 1a"
 
 # Push CSV files to S3, preserving the folder structure
 push_files_to_S3_with_nested_folders(local_dir = local_dir, s3_base_folder = s3_base_folder,
 									file_extensions = c("csv", "pdf"),
 									overwrite = FALSE, public_read = TRUE)
+
+# Specify the local directory containing the CSV files and nested folders
+local_dir <- "/home/onyxia/work/EstITE/Simulations_Stage/Setup 1b"
+
+# Specify the base S3 "folder" path
+s3_base_folder <- "Simulations_Stage/Setup 1b"
+
+# Push CSV files to S3, preserving the folder structure
+push_files_to_S3_with_nested_folders(local_dir = local_dir, s3_base_folder = s3_base_folder,
+									file_extensions = c("csv", "pdf"),
+									overwrite = FALSE, public_read = TRUE)
+
+# Specify the local directory containing the CSV files and nested folders
+local_dir <- "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2a"
+
+# Specify the base S3 "folder" path
+s3_base_folder <- "Simulations_Stage/Setup 2a"
+
+# Push CSV files to S3, preserving the folder structure
+push_files_to_S3_with_nested_folders(local_dir = local_dir, s3_base_folder = s3_base_folder,
+									file_extensions = c("csv", "pdf"),
+									overwrite = FALSE, public_read = TRUE)
+
+                  # Specify the local directory containing the CSV files and nested folders
+local_dir <- "/home/onyxia/work/EstITE/Simulations_Stage/Setup 2b"
+
+# Specify the base S3 "folder" path
+s3_base_folder <- "Simulations_Stage/Setup 2b"
+
+# Push CSV files to S3, preserving the folder structure
+push_files_to_S3_with_nested_folders(local_dir = local_dir, s3_base_folder = s3_base_folder,
+									file_extensions = c("csv", "pdf"),
+									overwrite = FALSE, public_read = TRUE)
+
 
 
 pull_files_from_S3_with_nested_folders <- function(bucket_name = "debie",
