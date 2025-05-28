@@ -911,3 +911,175 @@ optimize_and_evaluate_rlasso <- function(x_train, w_train, y_train,
     best_performance = best_performance
   ))
 }
+
+optimize_and_evaluate_X_logit_RF <- function(train_augmX, z_train, y_train,
+                                       test_augmX, z_test, y_test,
+                                       Test_CATT, nfolds = 5, nthread = 0, verbose=TRUE) {
+  #print("Starting sequential optimization for X-RF...")
+
+  # Set default values
+  default_params <- list(
+    ntree = 1000,
+    mtry = 2,
+    nodesizeSpl = 2,
+    nodesizeAvg = 1,
+    sample.fraction = 0.5
+  )
+
+  best_tau <- default_params
+  best_e <- default_params
+
+  best_performance <- Inf
+  best_model <- NULL
+
+  param_ranges <- list(
+    mtry = c(1, 2, 3, 4),
+    sample.fraction = c(0.01, 0.05,0.1, 0.2, 0.3, 0.4, 0.5, 0.6),
+    nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),
+    nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),
+    ntree = c(1000, 1500, 2000, 3000, 5000, 10000, 300, 500)
+  )
+
+
+  ### -------- Optimize tau.forestry --------
+  for (param_name in names(param_ranges)) {
+    if (verbose){
+    print(paste("Optimizing tau.forestry:", param_name))
+    }
+    for (value in param_ranges[[param_name]]) {
+      tau_params <- best_tau
+      tau_params[[param_name]] <- value
+
+      XRF <- X_RF(
+        feat = train_augmX,
+        tr = z_train,
+        yobs = y_train,
+        predmode = "propmean",
+        nthread = nthread,
+        verbose = FALSE,
+        tau.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = tau_params$ntree,
+          replace = TRUE,
+          sample.fraction = tau_params$sample.fraction,
+          mtry = tau_params$mtry,
+          nodesizeSpl = tau_params$nodesizeSpl,
+          nodesizeAvg = tau_params$nodesizeAvg,
+          splitratio = 0.8,
+          middleSplit = TRUE
+        ),
+        e.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_e$ntree,
+          replace = TRUE,
+          sample.fraction = best_e$sample.fraction,
+          mtry = best_e$mtry,
+          nodesizeSpl = best_e$nodesizeSpl,
+          nodesizeAvg = best_e$nodesizeAvg,
+          splitratio = 0.5,
+          middleSplit = FALSE
+        )
+      )
+
+      test_est <- EstimateCate(XRF, test_augmX)
+
+      if (any(is.na(test_est)) || length(test_est[z_test == 1]) == 0 || any(is.na(test_est[z_test == 1]))) {
+        warning(paste("Skipping parameter combo due to NA in test_est or empty treated subset"))
+        next
+      }
+
+      if (length(Test_CATT) != sum(z_test == 1)) {
+        warning("Length mismatch between Test_CATT and test_est[z_test == 1]")
+        next
+      }
+
+      PEHE_val <- tryCatch({
+        PEHE(Test_CATT, test_est[z_test == 1])
+      }, error = function(e) {
+        warning(paste("PEHE computation failed:", e$message))
+        NA
+      })
+
+      if (!is.na(PEHE_val) && PEHE_val < best_performance) {
+        best_performance <- PEHE_val
+        best_tau <- tau_params
+        best_model <- XRF
+        if (verbose) {
+          print("Updated best performance (tau):")
+          print(best_performance)
+        }
+      }
+
+      rm(XRF)
+    }
+  }
+
+  ### -------- Optimize e.forestry --------
+  for (param_name in names(param_ranges)) {
+    if (verbose){
+    print(paste("Optimizing e.forestry:", param_name))
+    }
+    for (value in param_ranges[[param_name]]) {
+      e_params <- best_e
+      e_params[[param_name]] <- value
+
+      if (verbose){
+        print("ntree")
+        print(e_params$ntree)
+      }
+
+      XRF <- X_RF(
+        feat = train_augmX,
+        tr = z_train,
+        yobs = y_train,
+        predmode = "propmean",
+        nthread = nthread,
+        verbose = FALSE,
+        tau.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = best_tau$ntree,
+          replace = TRUE,
+          sample.fraction = best_tau$sample.fraction,
+          mtry = best_tau$mtry,
+          nodesizeSpl = best_tau$nodesizeSpl,
+          nodesizeAvg = best_tau$nodesizeAvg,
+          splitratio = 0.8,
+          middleSplit = TRUE
+        ),
+        e.forestry = list(
+          relevant.Variable = 1:ncol(train_augmX),
+          ntree = e_params$ntree,
+          replace = TRUE,
+          sample.fraction = e_params$sample.fraction,
+          mtry = e_params$mtry,
+          nodesizeSpl = e_params$nodesizeSpl,
+          nodesizeAvg = e_params$nodesizeAvg,
+          splitratio = 0.5,
+          middleSplit = FALSE
+        )
+      )
+
+      test_est <- EstimateCate(XRF, test_augmX)
+      PEHE_val <- PEHE(Test_CATT, test_est[z_test == 1])
+
+      if (PEHE_val < best_performance) {
+        best_performance <- PEHE_val
+        best_e <- e_params
+        best_model <- XRF
+        if (verbose) {
+          print("Updated best performance (e):")
+          print(best_performance)
+        }
+      }
+
+      rm(XRF)
+    }
+  }
+
+  return(list(
+    best_model = best_model,
+    best_tau_params = best_tau,
+    best_e_params = best_e,
+    best_performance = best_performance
+  ))
+}

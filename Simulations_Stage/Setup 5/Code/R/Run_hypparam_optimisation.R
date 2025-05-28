@@ -5,7 +5,7 @@ if (!require("tidyverse")) {
 
 # Install causalToolbox from GitHub if not already installed
 if (!require("causalToolbox")) {
-  devtools::install_github("soerenkuenzel/causalToolbox", upgrade = "never")
+  devtools::install_github("debie-A320FL/causalToolbox", upgrade = "never")
 }
 
 # Install grf if not already installed
@@ -68,7 +68,7 @@ val_augmX = res_val$test_augmX; z_val = res_val$z_test; y_val = res_val$y_test
 val_CATT = res_val$Test_CATT
 
 
-size_sample_train_test = 10000
+size_sample_train_test = 1000
 print("size_sample_train_test")
 print(size_sample_train_test)
 res_train_test = prepare_train_data(data = data_train_test, hyperparams = hyperparams,
@@ -122,7 +122,7 @@ print(CATT_Test_PEHE)
 best_alpha <- result$best_alpha
 print("best alpha")
 print(best_alpha)
-}
+
 
 param_grid <- expand.grid(
     sample.fraction =c(0.05,0.1, 0.15, 0.2),  # Fraction of samples used for each tree
@@ -155,8 +155,8 @@ test_est = EstimateCate(model, test_augmX)
 CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
 print("Perf on test data")
 print(CATT_Test_PEHE)
+}
 
-if (0){
 cat("\nS_RF\n")
 start_time_RF2 <- Sys.time()
 result <- optimize_and_evaluate_S_RF_2(
@@ -179,25 +179,6 @@ print(CATT_Test_PEHE)
 
 print(result$best_params)
 
-SRF <- S_RF(train_augmX, z_train, y_train, mu.forestry = SRF_result$best_params)
-
-SRF <- S_RF(train_augmX, z_train, y_train,
-            mu.forestry = list(
-              ntree = result$best_params$ntree,
-              replace = result$best_params$replace,
-              sample.fraction = result$best_params$sample.fraction,
-              mtry = result$best_params$mtry,
-              nodesizeSpl = result$best_params$nodesizeSpl,
-              nodesizeAvg = result$best_params$nodesizeAvg,
-              splitratio = result$best_params$splitratio,
-              middleSplit = result$best_params$middleSplit
-            ))
-
-model <- SRF
-
-
-
-
 cat("\n\n\n\n")
 print("T_RF")
 start_time <- Sys.time()
@@ -219,6 +200,7 @@ CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
 print("Perf on test data")
 print(CATT_Test_PEHE)
 
+
 cat("\n\n\n\n")
 print("X_RF")
 start_time_RF <- Sys.time()
@@ -239,4 +221,25 @@ test_est = EstimateCate(model, test_augmX[,-ncol(test_augmX)])
 CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
 print("Perf on test data")
 print(CATT_Test_PEHE)
-}
+
+
+cat("\n\n\n\n")
+print("X_logit_RF")
+start_time_RF <- Sys.time()
+result <- optimize_and_evaluate_X_logit_RF(
+  train_augmX[,-ncol(train_augmX)], z_train, y_train, val_augmX[,-ncol(val_augmX)], z_val, y_val,
+  val_CATT, verbose=FALSE
+)
+
+end_time <- Sys.time()
+execution_time <- end_time - start_time_RF
+print("X-logit_RF_execution_time : ")
+print(execution_time)
+best_perf <- result$best_performance
+print("best perf on validation")
+print(best_perf)
+model <- result$best_model
+test_est = EstimateCate(model, test_augmX[,-ncol(test_augmX)])
+CATT_Test_PEHE = PEHE(Test_CATT, test_est[z_test == 1])
+print("Perf on test data")
+print(CATT_Test_PEHE)
