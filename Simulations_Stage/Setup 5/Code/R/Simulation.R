@@ -97,9 +97,9 @@ data_train_test <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 data_validation <- read.csv("./../Setup 1a/Data/simulated_10K_data_validation.csv")
 size_sample_val = nrow(data_validation)
 
-size_sample = 1e3
+size_sample = 1e5
 
-list_treatment_percentile <- c(35,25,15,10,5,3,2,1,0.5,0.3,0.2,0.1)
+list_treatment_percentile <- c(25,10,5,2)
 for (treatment_percentile in list_treatment_percentile) {
 
   print(paste("treatment_percentile =", treatment_percentile))
@@ -115,7 +115,7 @@ for (treatment_percentile in list_treatment_percentile) {
   # Estimation --------------------------------------------------------------
 
   ### OPTIONS
-  B = 3   # Num of Simulations
+  B = 250   # Num of Simulations
 
   MLearners = c('R-LASSO',"S-RF","T-RF","X-RF")
 
@@ -123,7 +123,9 @@ for (treatment_percentile in list_treatment_percentile) {
 
   mylist = list(
     CATT_Test_Bias = matrix(NA, B, nb_learner),
-    CATT_Test_PEHE = matrix(NA, B, nb_learner)
+    CATT_Test_PEHE = matrix(NA, B, nb_learner),
+    CATC_Test_Bias = matrix(NA, B, nb_learner),
+    CATC_Test_PEHE = matrix(NA, B, nb_learner)
   )
 
   Results <- map(mylist, `colnames<-`, MLearners)
@@ -157,7 +159,7 @@ for (treatment_percentile in list_treatment_percentile) {
 
     train_augmX = res_train_test$train_augmX; z_train = res_train_test$z_train; y_train = res_train_test$y_train
     test_augmX = res_train_test$test_augmX; z_test = res_train_test$z_test; y_test = res_train_test$y_test
-    Test_CATT = res_train_test$Test_CATT
+    Test_CATT = res_train_test$Test_CATT; Test_CATC = res_train_test$Test_CATC
 
     
     ###### MODELS ESTIMATION  ------------------------------------------------
@@ -208,8 +210,15 @@ for (treatment_percentile in list_treatment_percentile) {
     Results$CATT_Test_Bias[i, 'S-RF'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'S-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    cat("Perf on test data : ")
-    cat(Results$CATT_Test_PEHE[i, 'S-RF'])  
+    cat("Perf CATT on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'S-RF'])
+
+    # CATC
+    Results$CATC_Test_Bias[i, 'S-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    Results$CATC_Test_PEHE[i, 'S-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    
+    cat("Perf CATC on test data : ")
+    cat(Results$CATC_Test_PEHE[i, 'S-RF'])   
 
     rm(SRF)
 
@@ -229,7 +238,6 @@ for (treatment_percentile in list_treatment_percentile) {
       print(execution_time)
     }
 
-    TRF_result$best_mu1$
     start_time <- Sys.time()
     TRF <- T_RF(train_augmX, z_train, y_train,
                 mu0.forestry = list(
@@ -268,8 +276,15 @@ for (treatment_percentile in list_treatment_percentile) {
     Results$CATT_Test_Bias[i, 'T-RF'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'T-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    cat("Perf on test data : ")
+    cat("Perf CATT on test data : ")
     cat(Results$CATT_Test_PEHE[i, 'T-RF']) 
+
+    # CATC
+    Results$CATC_Test_Bias[i, 'T-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    Results$CATC_Test_PEHE[i, 'T-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    
+    cat("Perf CATC on test data : ")
+    cat(Results$CATC_Test_PEHE[i, 'T-RF']) 
 
     rm(TRF)
     
@@ -293,7 +308,7 @@ for (treatment_percentile in list_treatment_percentile) {
     start_time <- Sys.time()
     XRF <- X_RF(train_augmX[,-ncol(train_augmX)], z_train, y_train,
                 mu.forestry = list(
-                  relevant.Variable = 1:ncol(train_augmX),
+                  relevant.Variable = 1:ncol(train_augmX[,-ncol(train_augmX)]),
                   ntree = XRF_result$best_mu$ntree,
                   replace = TRUE,
                   sample.fraction = XRF_result$best_mu$sample.fraction,
@@ -304,7 +319,7 @@ for (treatment_percentile in list_treatment_percentile) {
                   middleSplit = TRUE
                 ),
                 tau.forestry = list(
-                  relevant.Variable = 1:ncol(train_augmX),
+                  relevant.Variable = 1:ncol(train_augmX[,-ncol(train_augmX)]),
                   ntree = XRF_result$best_tau$ntree,
                   replace = TRUE,
                   sample.fraction = XRF_result$best_tau$sample.fraction,
@@ -315,7 +330,7 @@ for (treatment_percentile in list_treatment_percentile) {
                   middleSplit = TRUE
                 ),
                 e.forestry = list(
-                  relevant.Variable = 1:ncol(train_augmX),
+                  relevant.Variable = 1:ncol(train_augmX[,-ncol(train_augmX)]),
                   ntree = XRF_result$best_e$ntree,
                   replace = TRUE,
                   sample.fraction = XRF_result$best_e$sample.fraction,
@@ -340,8 +355,15 @@ for (treatment_percentile in list_treatment_percentile) {
     Results$CATT_Test_Bias[i, 'X-RF'] = bias(Test_CATT, test_est[z_test == 1])
     Results$CATT_Test_PEHE[i, 'X-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
     
-    cat("Perf on test data : ")
-    cat(Results$CATT_Test_PEHE[i, 'X-RF']) 
+    cat("Perf CATT on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'X-RF'])
+
+    # CATC
+    Results$CATC_Test_Bias[i, 'X-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    Results$CATC_Test_PEHE[i, 'X-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    
+    cat("Perf on CATC test data : ")
+    cat(Results$CATC_Test_PEHE[i, 'X-RF']) 
 
     rm(XRF)
 
@@ -384,6 +406,13 @@ for (treatment_percentile in list_treatment_percentile) {
     
     cat("Perf on test data : ")
     cat(Results$CATT_Test_PEHE[i, 'R-LASSO'])
+
+    # CATC
+    Results$CATC_Test_Bias[i, 'R-LASSO'] = bias(Test_CATC, test_est[z_test == 0])
+    Results$CATC_Test_PEHE[i, 'R-LASSO'] = PEHE(Test_CATC, test_est[z_test == 0])
+    
+    cat("Perf on test data : ")
+    cat(Results$CATC_Test_PEHE[i, 'R-LASSO'])
 
     rm(RLASSO)
   }

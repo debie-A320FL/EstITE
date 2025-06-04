@@ -855,7 +855,7 @@ prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_r
 
   return(list(train_augmX = train_augmX, z_train = z_train, y_train = y_train,
               test_augmX = test_augmX, z_test = z_test, y_test = y_test,
-              Test_CATT = Test_CATT))
+              Test_CATT = Test_CATT, Test_CATC=Test_CATC))
 }
 
 optimize_and_evaluate_rlasso <- function(x_train, w_train, y_train,
