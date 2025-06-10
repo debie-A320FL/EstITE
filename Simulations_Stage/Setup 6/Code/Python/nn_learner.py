@@ -49,6 +49,9 @@ def train_s_learner(
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+    train_losses = []
+    val_losses   = []
+
     prev_val_loss = float('inf')
     no_improve_count = 0
 
@@ -63,6 +66,7 @@ def train_s_learner(
         train_loss = criterion(preds, y_train)
         train_loss.backward()
         optimizer.step()
+        train_losses.append(train_loss.item())
 
         # Save a copy of this epoch’s model parameters at the end of the epoch
         # We’ll later roll back to one of these if needed.
@@ -72,6 +76,8 @@ def train_s_learner(
         model.eval()
         with torch.no_grad():
             current_val_loss = criterion(model(X_val), y_val).item()
+
+        val_losses.append(current_val_loss)
 
         # ---- (C) Check relative improvement ----
         if prev_val_loss < float('inf'):
@@ -102,7 +108,7 @@ def train_s_learner(
         if epoch == max_iter:
             print(f"Reaching epoch {epoch} with a relative improvement of {rel_imp:.6f}")
 
-    return model, scaler
+    return model, scaler,train_losses, val_losses
 
 
 
@@ -162,6 +168,9 @@ def train_t_learner(
         criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+        train_losses = []
+        val_losses   = []
+
         prev_val_loss = float('inf')
         no_improve_count = 0
         recent_states = deque(maxlen=patience)
@@ -174,6 +183,7 @@ def train_t_learner(
             train_loss = criterion(preds, y_train)
             train_loss.backward()
             optimizer.step()
+            train_losses.append(train_loss.item())
 
             # Save current state
             recent_states.append(copy.deepcopy(model.state_dict()))
@@ -182,6 +192,7 @@ def train_t_learner(
             model.eval()
             with torch.no_grad():
                 current_val_loss = criterion(model(X_val), y_val).item()
+            val_losses.append(current_val_loss)
 
             if prev_val_loss < float('inf'):
                 rel_imp = (prev_val_loss - current_val_loss) / prev_val_loss
@@ -206,12 +217,11 @@ def train_t_learner(
             if epoch == max_iter:
                 print(f"Reaching epoch {epoch} with a relative improvement of {rel_imp:.6f}")
 
-        return model, scaler
+        return model, scaler,train_losses, val_losses
 
-    model0, scaler0 = train_group(X0, y0, label=0)
-    model1, scaler1 = train_group(X1, y1, label=1)
-    return model0, scaler0, model1, scaler1
-
+    model0, scaler0, train_losses0, val_losses0 = train_group(X0, y0, label=0)
+    model1, scaler1, train_losses1, val_losses1 = train_group(X1, y1, label=1)
+    return model0, scaler0, train_losses0, val_losses0, model1, scaler1, train_losses1, val_losses1
 
 
 if __name__ == "__main__":
@@ -227,94 +237,130 @@ if __name__ == "__main__":
     import copy
     from collections import deque
 
-    # 1.1 Pick a single integer “seed” for reproducibility:
-    SEED = 2025
+    for sim in range(10):
+        print(f"\n\nRun number {sim+1}")
+        # 1.1 Pick a single integer “seed” for reproducibility:
+        SEED = 2025 + sim
 
-    # 1.2 Python built‐ins:
-    random.seed(SEED)
+        # 1.2 Python built‐ins:
+        random.seed(SEED)
 
-    # 1.3 NumPy
-    np.random.seed(SEED)
+        # 1.3 NumPy
+        np.random.seed(SEED)
 
-    # 1.4 PyTorch (both CPU and GPU, if you ever switch to a GPU)
-    torch.manual_seed(SEED)
-    torch.cuda.manual_seed(SEED)
-    torch.cuda.manual_seed_all(SEED)
+        # 1.4 PyTorch (both CPU and GPU, if you ever switch to a GPU)
+        torch.manual_seed(SEED)
+        torch.cuda.manual_seed(SEED)
+        torch.cuda.manual_seed_all(SEED)
 
-    # 1.5 Make PyTorch’s CuDNN deterministic (only relevant if you use a GPU)
-    #     and disable the benchmark mode so it doesn’t pick new kernels at random:
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+        # 1.5 Make PyTorch’s CuDNN deterministic (only relevant if you use a GPU)
+        #     and disable the benchmark mode so it doesn’t pick new kernels at random:
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
-    # 1) Generate a larger dataset and true potential outcomes
-    n_samples_big = 10000
-    n_features = 1
+        # 1) Generate a larger dataset and true potential outcomes
+        n_samples_big = 10000
+        n_features = 1
 
-    X_big = np.random.rand(n_samples_big, n_features).astype(np.float32)
-    Z_big = np.random.binomial(1, 0.5, size=(n_samples_big, 1)).astype(np.float32)
+        X_big = np.random.rand(n_samples_big, n_features).astype(np.float32)
+        Z_big = np.random.binomial(1, 0.9, size=(n_samples_big, 1)).astype(np.float32)
 
-    y0_big = (2 * X_big + X_big * X_big).sum(axis=1, keepdims=True)
-    y1_big = (X_big + 3 * X_big * X_big).sum(axis=1, keepdims=True)
-    y_big = (1 - Z_big) * y0_big + Z_big * y1_big
+        y0_big = (2 * X_big + X_big * X_big).sum(axis=1, keepdims=True)
+        y1_big = (X_big + 3 * X_big * X_big).sum(axis=1, keepdims=True)
+        y_big = (1 - Z_big) * y0_big + Z_big * y1_big
 
-    # 2) Split into train/test (80/20), keeping y0 and y1 for PEHE
-    X_train, X_test, Z_train, Z_test, y_train, y_test, y0_train, y0_test, y1_train, y1_test = train_test_split(
-        X_big, Z_big, y_big, y0_big, y1_big, test_size=0.3, random_state=SEED
-    )
+        # 2) Split into train/test (80/20), keeping y0 and y1 for PEHE
+        X_train, X_test, Z_train, Z_test, y_train, y_test, y0_train, y0_test, y1_train, y1_test = train_test_split(
+            X_big, Z_big, y_big, y0_big, y1_big, test_size=0.3, random_state=SEED
+        )
 
-    # 3) Train S-learner and T-learner on the training set
-    tol = 1e-3
-    max_iter = 10000
-    hidden_dim = 64
-    lr = 0.001
-    patience = 20
-    print("starting...")
-    model_s, scaler_s = train_s_learner(X_train, Z_train, y_train,
-                                        max_iter=max_iter, tol=tol,
-                                        hidden_dim=hidden_dim, lr=lr,
-                                        patience=patience)
+        # 3) Train S-learner and T-learner on the training set
+        tol = 1e-5
+        max_iter = 10000
+        hidden_dim = 64
+        lr = 0.001
+        patience = 20
+        print("starting...")
+        model_s, scaler_s, s_train, s_val = train_s_learner(X_train, Z_train, y_train,
+                                            max_iter=max_iter, tol=tol,
+                                            hidden_dim=hidden_dim, lr=lr,
+                                            patience=patience)
 
-    model0_t, scaler0_t, model1_t, scaler1_t = train_t_learner(X_train, Z_train, y_train,
-                                                                max_iter=max_iter, tol=tol,
-                                                                hidden_dim=hidden_dim, lr=lr,
-                                                                patience=patience)
+        (model0, scaler0, t0_train, t0_val,
+        model1, scaler1, t1_train, t1_val) = train_t_learner(X_train, Z_train, y_train,
+                                                                    max_iter=max_iter, tol=tol,
+                                                                    hidden_dim=hidden_dim, lr=lr,
+                                                                    patience=patience)
 
-    # 4) On the test set, compute PEHE for each learner
-    pehe_s_list = []
-    pehe_t_list = []
+        # 4) On the test set, compute PEHE for each learner
+        pehe_s_list = []
+        pehe_t_list = []
 
-    for i in range(len(X_test)):
-        x_i = X_test[i : i + 1]            # shape (1, n_features)
-        true_effect = (y1_test[i] - y0_test[i]).item()
+        for i in range(len(X_test)):
+            x_i = X_test[i : i + 1]            # shape (1, n_features)
+            true_effect = (y1_test[i] - y0_test[i]).item()
 
-        # S-learner: estimate y_hat(z=0) and y_hat(z=1)
-        xz0 = np.concatenate([x_i, np.array([[0.0]], dtype=np.float32)], axis=1)
-        xz1 = np.concatenate([x_i, np.array([[1.0]], dtype=np.float32)], axis=1)
+            # S-learner: estimate y_hat(z=0) and y_hat(z=1)
+            xz0 = np.concatenate([x_i, np.array([[0.0]], dtype=np.float32)], axis=1)
+            xz1 = np.concatenate([x_i, np.array([[1.0]], dtype=np.float32)], axis=1)
 
-        xz0_scaled = scaler_s.transform(xz0)
-        xz1_scaled = scaler_s.transform(xz1)
+            xz0_scaled = scaler_s.transform(xz0)
+            xz1_scaled = scaler_s.transform(xz1)
 
-        with torch.no_grad():
-            y0_hat_s = model_s(torch.from_numpy(xz0_scaled)).item()
-            y1_hat_s = model_s(torch.from_numpy(xz1_scaled)).item()
+            with torch.no_grad():
+                y0_hat_s = model_s(torch.from_numpy(xz0_scaled)).item()
+                y1_hat_s = model_s(torch.from_numpy(xz1_scaled)).item()
 
-        est_effect_s = y1_hat_s - y0_hat_s
+            est_effect_s = y1_hat_s - y0_hat_s
 
-        # T-learner: estimate with separate models (ignore Z)
-        x0_scaled = scaler0_t.transform(x_i)
-        x1_scaled = scaler1_t.transform(x_i)
+            # T-learner: estimate with separate models (ignore Z)
+            x0_scaled = scaler0.transform(x_i)
+            x1_scaled = scaler1.transform(x_i)
 
-        with torch.no_grad():
-            y0_hat_t = model0_t(torch.from_numpy(x0_scaled)).item()
-            y1_hat_t = model1_t(torch.from_numpy(x1_scaled)).item()
+            with torch.no_grad():
+                y0_hat_t = model0(torch.from_numpy(x0_scaled)).item()
+                y1_hat_t = model1(torch.from_numpy(x1_scaled)).item()
 
-        est_effect_t = y1_hat_t - y0_hat_t
+            est_effect_t = y1_hat_t - y0_hat_t
 
-        pehe_s_list.append((est_effect_s - true_effect) ** 2)
-        pehe_t_list.append((est_effect_t - true_effect) ** 2)
+            pehe_s_list.append((est_effect_s - true_effect) ** 2)
+            pehe_t_list.append((est_effect_t - true_effect) ** 2)
 
-    pehe_s = math.sqrt(np.mean(pehe_s_list))
-    pehe_t = math.sqrt(np.mean(pehe_t_list))
+        pehe_s = math.sqrt(np.mean(pehe_s_list))
+        pehe_t = math.sqrt(np.mean(pehe_t_list))
 
-    print(f"PEHE (S-learner): {pehe_s:.6f}")
-    print(f"PEHE (T-learner): {pehe_t:.6f}")
+        print(f"PEHE (S-learner): {pehe_s:.6f}")
+        print(f"PEHE (T-learner): {pehe_t:.6f}")
+
+        from matplotlib.backends.backend_pdf import PdfPages
+        import matplotlib.pyplot as plt
+
+        with PdfPages(f'learning_curves_{sim}.pdf') as pdf:
+            # S-learner
+            plt.figure()
+            plt.plot(s_train, label='Train Loss')
+            plt.plot(s_val,   label='Validation Loss')
+            plt.yscale('log')
+            plt.title('S-learner Learning Curve')
+            plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend()
+            pdf.savefig(); plt.close()
+
+            # T-learner Z=0
+            plt.figure()
+            plt.plot(t0_train, label='Train Loss')
+            plt.plot(t0_val,   label='Validation Loss')
+            plt.yscale('log')
+            plt.title('T-learner (Z=0) Learning Curve')
+            plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend()
+            pdf.savefig(); plt.close()
+
+            # T-learner Z=1
+            plt.figure()
+            plt.plot(t1_train, label='Train Loss')
+            plt.plot(t1_val,   label='Validation Loss')
+            plt.yscale('log')
+            plt.title('T-learner (Z=1) Learning Curve')
+            plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend()
+            pdf.savefig(); plt.close()
+
+        print("Saved learning curves to learning_curves.pdf")
