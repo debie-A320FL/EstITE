@@ -4,7 +4,9 @@ def train_s_learner(
     tol=1e-3,
     patience=10,
     hidden_dim=64,
-    lr=0.001
+    lr=0.001,
+    patience_lr = 20,
+    factor_lr = 0.25
 ):
     """
     S‐learner with “roll back” patience:
@@ -49,10 +51,17 @@ def train_s_learner(
     criterion = nn.MSELoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+    scheduler = ReduceLROnPlateau(
+        optimizer, mode='min', factor=factor_lr, patience=patience_lr, cooldown=2* patience_lr
+    )
+
+    # Initial learning rate tracking
+    prev_lr = optimizer.param_groups[0]['lr']
+
     train_losses = []
     val_losses   = []
 
-    prev_val_loss = float('inf')
+    best_val_loss = float('inf')
     no_improve_count = 0
 
     # Keep the last `patience` state_dicts in a deque
@@ -77,20 +86,27 @@ def train_s_learner(
         with torch.no_grad():
             current_val_loss = criterion(model(X_val), y_val).item()
 
+        scheduler.step(current_val_loss)
+
+        # Check if LR changed
+        current_lr = optimizer.param_groups[0]['lr']
+        if current_lr != prev_lr:
+            print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {current_lr:.3e}")
+            prev_lr = current_lr
+            
         val_losses.append(current_val_loss)
 
         # ---- (C) Check relative improvement ----
-        if prev_val_loss < float('inf'):
-            rel_imp = (prev_val_loss - current_val_loss) / prev_val_loss
+        if best_val_loss < float('inf'):
+            rel_imp = (best_val_loss - current_val_loss) / best_val_loss
         else:
-            # For the very first epoch, force rel_imp to be large so no “early stop” immediately
             rel_imp = float('inf')
 
-        if rel_imp < tol:
-            no_improve_count += 1
-        else:
+        if rel_imp >= tol:
+            best_val_loss = current_val_loss
             no_improve_count = 0
-            prev_val_loss = current_val_loss
+        else:
+            no_improve_count += 1
 
 
         # ---- (D) If we’ve failed to improve `patience` times in a row → stop & roll back
@@ -100,13 +116,13 @@ def train_s_learner(
             model.load_state_dict(rollback_state)
             print(
                 f"S‐learner: stopping at epoch {epoch} "
-                f"after {patience} epochs with rel_imp < {tol:.6e}. "
+                f"after {patience} epochs with {rel_imp:.3e} < {tol:.3e}. "
                 f"Rolling back to epoch {epoch-patience} model."
             )
             break
 
         if epoch == max_iter:
-            print(f"Reaching epoch {epoch} with a relative improvement of {rel_imp:.6f}")
+            print(f"Reaching epoch {epoch} with a relative improvement of {rel_imp:.3e}")
 
     return model, scaler,train_losses, val_losses
 
@@ -116,11 +132,13 @@ def train_s_learner(
 
 def train_t_learner(
     X, Z, y,
-    max_iter=1000,
+    max_iter=100,
     tol=1e-3,
     patience=10,
     hidden_dim=64,
-    lr=0.001
+    lr=0.001,
+    patience_lr = 20,
+    factor_lr = 0.25
 ):
     """
     T‐learner with roll‐back patience:
@@ -168,10 +186,17 @@ def train_t_learner(
         criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
 
+        scheduler = ReduceLROnPlateau(
+            optimizer, mode='min', factor=factor_lr, patience=patience_lr, cooldown=2* patience_lr
+        )
+
+        # Initial learning rate tracking
+        prev_lr = optimizer.param_groups[0]['lr']
+
         train_losses = []
         val_losses   = []
 
-        prev_val_loss = float('inf')
+        best_val_loss = float('inf')
         no_improve_count = 0
         recent_states = deque(maxlen=patience)
 
@@ -192,30 +217,41 @@ def train_t_learner(
             model.eval()
             with torch.no_grad():
                 current_val_loss = criterion(model(X_val), y_val).item()
+            
+            scheduler.step(current_val_loss)
+
+            # Check if LR changed
+            current_lr = optimizer.param_groups[0]['lr']
+            if current_lr != prev_lr:
+                print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {current_lr:.3e}")
+                prev_lr = current_lr
+
             val_losses.append(current_val_loss)
 
-            if prev_val_loss < float('inf'):
-                rel_imp = (prev_val_loss - current_val_loss) / prev_val_loss
+            if best_val_loss < float('inf'):
+                rel_imp = (best_val_loss - current_val_loss) / best_val_loss
             else:
                 rel_imp = float('inf')
 
-            if rel_imp < tol:
-                no_improve_count += 1
-            else:
+            if rel_imp >= tol:
+                best_val_loss = current_val_loss
                 no_improve_count = 0
-                prev_val_loss = current_val_loss
+            else:
+                no_improve_count += 1
+
 
             if no_improve_count >= patience:
                 rollback_state = recent_states[0]
                 model.load_state_dict(rollback_state)
                 print(
                     f"T‐learner (Z={label}): stopping at epoch {epoch} "
-                    f"after {patience} bad epochs. Rolling back to epoch {epoch-patience}."
+                    f"after {patience} epochs with {rel_imp:.3e} < {tol:.3e}. "
+                    f"Rolling back to epoch {epoch-patience} model."
                 )
                 break
 
             if epoch == max_iter:
-                print(f"Reaching epoch {epoch} with a relative improvement of {rel_imp:.6f}")
+                print(f"Reaching epoch {epoch} with a relative improvement of {rel_imp:.3e}")
 
         return model, scaler,train_losses, val_losses
 
@@ -236,9 +272,11 @@ if __name__ == "__main__":
     from sklearn.preprocessing import StandardScaler
     import copy
     from collections import deque
+    from torch.optim.lr_scheduler import ReduceLROnPlateau
+
 
     for sim in range(10):
-        print(f"\n\nRun number {sim+1}")
+        print(f"\n\nRun number {sim}")
         # 1.1 Pick a single integer “seed” for reproducibility:
         SEED = 2025 + sim
 
@@ -275,29 +313,40 @@ if __name__ == "__main__":
         )
 
         # 3) Train S-learner and T-learner on the training set
-        tol = 1e-5
-        max_iter = 10000
+        tol = 1e-3
+        max_iter = 15000
         hidden_dim = 64
-        lr = 0.001
-        patience = 20
+        lr = 0.01
+        patience = 100
+        patience_lr = 25
+        factor_lr = 0.5
         print("starting...")
         model_s, scaler_s, s_train, s_val = train_s_learner(X_train, Z_train, y_train,
-                                            max_iter=max_iter, tol=tol,
-                                            hidden_dim=hidden_dim, lr=lr,
-                                            patience=patience)
+                                            max_iter=max_iter,
+                                            tol=tol,
+                                            hidden_dim=hidden_dim,
+                                            lr=lr,
+                                            patience=patience,
+                                            patience_lr=patience_lr,
+                                            factor_lr=factor_lr)
 
         (model0, scaler0, t0_train, t0_val,
-        model1, scaler1, t1_train, t1_val) = train_t_learner(X_train, Z_train, y_train,
-                                                                    max_iter=max_iter, tol=tol,
-                                                                    hidden_dim=hidden_dim, lr=lr,
-                                                                    patience=patience)
+        model1, scaler1, t1_train, t1_val) = train_t_learner(
+                                                    X_train, Z_train, y_train,
+                                                    max_iter=max_iter,
+                                                    tol=tol,
+                                                    hidden_dim=hidden_dim,
+                                                    lr=lr,
+                                                    patience=patience,
+                                                    patience_lr=patience_lr,
+                                                    factor_lr=factor_lr)
 
         # 4) On the test set, compute PEHE for each learner
         pehe_s_list = []
         pehe_t_list = []
 
         for i in range(len(X_test)):
-            x_i = X_test[i : i + 1]            # shape (1, n_features)
+            x_i = X_test[i : i + 1]            # shape (1, n_features)s
             true_effect = (y1_test[i] - y0_test[i]).item()
 
             # S-learner: estimate y_hat(z=0) and y_hat(z=1)
@@ -335,7 +384,7 @@ if __name__ == "__main__":
         from matplotlib.backends.backend_pdf import PdfPages
         import matplotlib.pyplot as plt
 
-        with PdfPages(f'learning_curves_{sim}.pdf') as pdf:
+        with PdfPages(f'learning_curves_{sim}_patience_{patience}_lr_cooldown_bis.pdf') as pdf:
             # S-learner
             plt.figure()
             plt.plot(s_train, label='Train Loss')
