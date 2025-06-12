@@ -3,6 +3,7 @@ import math
 import random
 import copy
 from collections import deque
+import time
 
 import numpy as np
 import torch
@@ -243,7 +244,6 @@ def train_x_learner(
     """
     # 1) Propensity
     prop_model = LogisticRegression().fit(X, Z.ravel())
-    e = prop_model.predict_proba(X)[:, 1].reshape(-1, 1)
 
     # 2) (Re)compute T-learner outcome models
     if compute_t:
@@ -257,13 +257,15 @@ def train_x_learner(
     mu1 = m1(torch.from_numpy(s1.transform(X_np))).detach().numpy().ravel()
 
     # 4) Build pseudo-outcomes D0 (controls) and D1 (treated)
+    # after computing mu0, mu1 on all X
     mask0 = (Z.ravel() == 0)
     mask1 = (Z.ravel() == 1)
 
-    D0 = (mu0[mask0] - y.ravel()[mask0]).reshape(-1, 1)
+    # correct pseudo-outcomes:
+    D0 = (mu1[mask0] - y.ravel()[mask0]).reshape(-1, 1)
     X0 = X[mask0]
 
-    D1 = (y.ravel()[mask1] - mu1[mask1]).reshape(-1, 1)
+    D1 = (y.ravel()[mask1] - mu0[mask1]).reshape(-1, 1)
     X1 = X[mask1]
 
     # 5) Fit tau0 and tau1 separately
@@ -303,9 +305,9 @@ if __name__ == "__main__":
         torch.backends.cudnn.benchmark = False
 
         # data
-        n_samples, n_features = 300, 1
+        n_samples, n_features = 1000, 1
         X = np.random.rand(n_samples, n_features).astype(np.float32)
-        Z = np.random.binomial(1, 0.5, size=(n_samples,1)).astype(np.float32)
+        Z = np.random.binomial(1, 0.2, size=(n_samples,1)).astype(np.float32)
         y0 = (2*X + X*X).sum(axis=1,keepdims=True)
         y1 = (X + 3*X*X).sum(axis=1,keepdims=True)
         y = (1-Z)*y0 + Z*y1
@@ -316,19 +318,35 @@ if __name__ == "__main__":
 
         # hyperparams
         params = dict(
-            max_iter=300, tol=1e-3,
+            max_iter=15000, tol=1e-3,
             hidden_dim=64, lr=0.01,
             patience=100, patience_lr=25,
             factor_lr=0.5
         )
         print("Training S, T, M, X learners...\n")
         # S
+        start_time = time.time()
         m_s, sc_s, s_tr, s_val = train_s_learner(X_train, Z_train, y_train, **params)
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"predict_time : {round(execution_time,3)}")
+
         # T
+        start_time = time.time()
         m0, sc0, t0_tr, t0_val, m1, sc1, t1_tr, t1_val = train_t_learner(X_train, Z_train, y_train, **params)
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"predict_time : {round(execution_time,3)}")
+
         # M
+        start_time = time.time()
         m_m, sc_m, m_tr, m_val = train_m_learner(X_train, Z_train, y_train, **params)
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"predict_time : {round(execution_time,3)}")
+
         # X
+        start_time = time.time()
         (
             prop_model,
             (m0, sc0), (m1, sc1),
@@ -338,6 +356,10 @@ if __name__ == "__main__":
             X_train, Z_train, y_train, compute_t=False,
             t_models=(m0, sc0, m1, sc1), **params
         )
+        end_time = time.time()
+        execution_time = end_time - start_time
+        print(f"predict_time (without T part): {round(execution_time,3)}")
+
 
         # PEHE
         pehe = {}
@@ -353,11 +375,11 @@ if __name__ == "__main__":
             ('X', lambda x: (
                             0.0, # the X learner return directly tau and not the 2 surface so we write tau as tau = tau - 0
                             (1 - prop_model.predict_proba(np.atleast_2d(x))[:, 1]) *
-                            tau0_m(torch.from_numpy(sc_tau0.transform(np.atleast_2d(x)))).item() +
+                            tau1_m(torch.from_numpy(sc_tau1.transform(np.atleast_2d(x)))).item() +
                             prop_model.predict_proba(np.atleast_2d(x))[:, 1] *
-                            tau1_m(torch.from_numpy(sc_tau1.transform(np.atleast_2d(x)))).item()
+                            tau0_m(torch.from_numpy(sc_tau0.transform(np.atleast_2d(x)))).item()
                         ))
-        ]:
+]:
             errs = []
             for i in range(len(X_test)):
                 x_i = X_test[i:i+1]
