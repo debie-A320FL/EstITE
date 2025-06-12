@@ -24,23 +24,26 @@ def train_group(
     factor_lr=0.25,
 ):
     """
-    Generic training + rollback patience.
+    Generic training + rollback patience, with optional GPU support.
     Returns: model, scaler, train_losses, val_losses, rollback_epoch
     """
-    # split
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # split + scale
     X_tr_np, X_val_np, y_tr_np, y_val_np = train_test_split(
         X, y, test_size=0.2, random_state=42
     )
-    # scale
     scaler = StandardScaler()
     X_tr_np = scaler.fit_transform(X_tr_np.astype(np.float32))
     X_val_np = scaler.transform(X_val_np.astype(np.float32))
-    # to tensors
-    X_tr = torch.from_numpy(X_tr_np)
-    y_tr = torch.from_numpy(y_tr_np.astype(np.float32))
-    X_val = torch.from_numpy(X_val_np)
-    y_val = torch.from_numpy(y_val_np.astype(np.float32))
-    # model
+
+    # to tensors on device
+    X_tr = torch.from_numpy(X_tr_np).to(device)
+    y_tr = torch.from_numpy(y_tr_np.astype(np.float32)).to(device)
+    X_val = torch.from_numpy(X_val_np).to(device)
+    y_val = torch.from_numpy(y_val_np.astype(np.float32)).to(device)
+
+    # model → device
     input_dim = X_tr.shape[1]
     model = nn.Sequential(
         nn.Linear(input_dim, hidden_dim),
@@ -48,12 +51,14 @@ def train_group(
         nn.Linear(hidden_dim, hidden_dim),
         nn.ReLU(),
         nn.Linear(hidden_dim, 1),
-    )
+    ).to(device)
+
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(
         optimizer, mode='min', factor=factor_lr,
         patience=patience_lr, cooldown=2*patience_lr
     )
+
     prev_lr = optimizer.param_groups[0]['lr']
     train_losses, val_losses = [], []
     best_val, no_imp = float('inf'), 0
@@ -61,40 +66,46 @@ def train_group(
     rollback_epoch = None
 
     for epoch in range(1, max_iter + 1):
-        # train
+        # — training —
         model.train()
         optimizer.zero_grad()
         loss_tr = nn.MSELoss()(model(X_tr), y_tr)
         loss_tr.backward()
         optimizer.step()
+
         train_losses.append(loss_tr.item())
         recent_states.append(copy.deepcopy(model.state_dict()))
-        # val
+
+        # — validation —
         model.eval()
         with torch.no_grad():
             loss_val = nn.MSELoss()(model(X_val), y_val).item()
         val_losses.append(loss_val)
-        # lr scheduler
+
+        # LR scheduler
         scheduler.step(loss_val)
         curr_lr = optimizer.param_groups[0]['lr']
         if curr_lr != prev_lr:
             print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
             prev_lr = curr_lr
-        # improvement
+
+        # early‐stop / rollback
         rel_imp = (best_val - loss_val)/best_val if best_val < float('inf') else float('inf')
         if rel_imp >= tol:
             best_val, no_imp = loss_val, 0
         else:
             no_imp += 1
-        # early stop + rollback
+
         if no_imp >= patience:
             rollback_epoch = epoch - patience
             model.load_state_dict(recent_states[0])
             print(f"Stopping at epoch {epoch} — rolling back to epoch {rollback_epoch}.")
             break
+
         if epoch == max_iter:
             rollback_epoch = max_iter
             print(f"Reached max_iter={max_iter}, using epoch {rollback_epoch}.")
+
     return model, scaler, train_losses, val_losses, rollback_epoch
 
 
@@ -108,39 +119,43 @@ def train_multitask_group(
     patience_lr=20,
     factor_lr=0.25,
 ):
-    # 1) train/val split
+    """
+    Multi‐task training + rollback patience, with optional GPU support.
+    Returns: model, scaler, train_losses, val_losses, rollback_epoch
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # split + scale
     X_tr_np, X_val_np, Z_tr_np, Z_val_np, y_tr_np, y_val_np = train_test_split(
         X, Z, y, test_size=0.2, random_state=42
     )
-
-    # 2) scale X
     scaler = StandardScaler()
     X_tr_np = scaler.fit_transform(X_tr_np.astype(np.float32))
     X_val_np = scaler.transform(X_val_np.astype(np.float32))
 
-    # 3) to tensors
-    X_tr = torch.from_numpy(X_tr_np)
-    Z_tr = torch.from_numpy(Z_tr_np.astype(np.float32))
-    y_tr = torch.from_numpy(y_tr_np.astype(np.float32))
-    X_val = torch.from_numpy(X_val_np)
-    Z_val = torch.from_numpy(Z_val_np.astype(np.float32))
-    y_val = torch.from_numpy(y_val_np.astype(np.float32))
+    # to tensors on device
+    X_tr = torch.from_numpy(X_tr_np).to(device)
+    Z_tr = torch.from_numpy(Z_tr_np.astype(np.float32)).to(device)
+    y_tr = torch.from_numpy(y_tr_np.astype(np.float32)).to(device)
+    X_val = torch.from_numpy(X_val_np).to(device)
+    Z_val = torch.from_numpy(Z_val_np.astype(np.float32)).to(device)
+    y_val = torch.from_numpy(y_val_np.astype(np.float32)).to(device)
 
-    # 👈 Ensure y_tr and y_val are shaped (N,1)
+    # ensure shape (N,1)
     if y_tr.dim() == 1:
         y_tr = y_tr.unsqueeze(1)
     if y_val.dim() == 1:
         y_val = y_val.unsqueeze(1)
 
-    # 4) model with 2 outputs
+    # model → device
     input_dim = X_tr.shape[1]
     model = nn.Sequential(
         nn.Linear(input_dim, hidden_dim),
         nn.ReLU(),
         nn.Linear(hidden_dim, hidden_dim),
         nn.ReLU(),
-        nn.Linear(hidden_dim, 2)
-    )
+        nn.Linear(hidden_dim, 2),
+    ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(
@@ -155,21 +170,20 @@ def train_multitask_group(
     rollback_epoch     = None
 
     for epoch in range(1, max_iter+1):
-        # — Training step —
+        # — train —
         model.train()
         optimizer.zero_grad()
-        out_tr = model(X_tr)               # shape [N,2]
-
-        # 👈 Now repeat along the last dim to get (N,2)
-        target_tr = y_tr.repeat(1, 2)
+        out_tr = model(X_tr)                # [N,2]
+        target_tr = y_tr.repeat(1, 2)       # [N,2]
         mask_tr   = torch.cat([1 - Z_tr, Z_tr], dim=1)
         loss_tr = ((out_tr - target_tr)**2 * mask_tr).sum(dim=1).mean()
         loss_tr.backward()
         optimizer.step()
+
         train_losses.append(loss_tr.item())
         recent_states.append(copy.deepcopy(model.state_dict()))
 
-        # — Validation step —
+        # — val —
         model.eval()
         with torch.no_grad():
             out_val = model(X_val)
@@ -180,13 +194,13 @@ def train_multitask_group(
         val_losses.append(loss_val)
         scheduler.step(loss_val)
 
-        # LR-change logging
+        # LR logging
         curr_lr = optimizer.param_groups[0]['lr']
         if curr_lr != prev_lr:
             print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
             prev_lr = curr_lr
 
-        # early-stopping / rollback logic
+        # early‐stop / rollback
         rel_imp = (best_val - loss_val)/best_val if best_val < float('inf') else float('inf')
         if rel_imp >= tol:
             best_val, no_imp = loss_val, 0
@@ -291,6 +305,11 @@ def train_m_learner(X, Z, y, **train_kwargs):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
+
+    # decide on device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Running on device: {device}")    # will print either "cuda" or "cpu"
+
 
     # reproducibility settings
     for sim in range(10):
