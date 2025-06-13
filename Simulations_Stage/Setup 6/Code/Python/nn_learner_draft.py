@@ -241,51 +241,86 @@ def train_x_learner(
     X, Z, y,
     compute_t: bool = True,
     t_models: tuple = None,
-    **train_kwargs
+    hidden_dim=64,
+    lr=1e-3,
+    max_iter=1000,
+    tol=1e-3,
+    patience=10,
+    patience_lr=20,
+    factor_lr=0.25,
 ):
     """
-    X-learner with two tau-models:
-      - Propensity e(x) by LogisticRegression
-      - Outcome models mu0, mu1 via T-learner (optional reuse)
-      - Pseudo-outcomes D0, D1 on controls/treated
-      - Tau0(X): regressing D0 on X; Tau1(X): regressing D1 on X
-      - Final tau_hat(x) = (1-e(x))*tau0(x) + e(x)*tau1(x)
+    X-learner with two τ-models, GPU-enabled if available.
+
     Returns:
       prop_model,
       (m0, scaler0), (m1, scaler1),
       tau0_model, scaler_tau0, tr0, val0, rollback0,
       tau1_model, scaler_tau1, tr1, val1, rollback1
     """
-    # 1) Propensity
+    import torch
+    from sklearn.linear_model import LogisticRegression
+
+    # 0) pick device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 1) estimate propensity on CPU (scikit-learn)
     prop_model = LogisticRegression().fit(X, Z.ravel())
 
-    # 2) (Re)compute T-learner outcome models
+    # 2) (re)compute or unpack T-learner outcome models
     if compute_t:
-        m0, s0, _, _, m1, s1, _, _ = train_t_learner(X, Z, y, **train_kwargs)
+        m0, s0, _, _, m1, s1, _, _ = train_t_learner(
+            X, Z, y,
+            hidden_dim=hidden_dim, lr=lr,
+            max_iter=max_iter, tol=tol,
+            patience=patience, patience_lr=patience_lr,
+            factor_lr=factor_lr
+        )
     else:
         m0, s0, m1, s1 = t_models
 
-    # 3) Get mu0(X), mu1(X) on *all* X
-    X_np = X.astype(np.float32)
-    mu0 = m0(torch.from_numpy(s0.transform(X_np))).detach().numpy().ravel()
-    mu1 = m1(torch.from_numpy(s1.transform(X_np))).detach().numpy().ravel()
+    # 3) move T-models to device
+    m0 = m0.to(device)
+    m1 = m1.to(device)
 
-    # 4) Build pseudo-outcomes D0 (controls) and D1 (treated)
-    # after computing mu0, mu1 on all X
+    # 4) compute mu0(x), mu1(x) on all X
+    X_np = X.astype(np.float32)
+    with torch.no_grad():
+        X_t0 = torch.from_numpy(s0.transform(X_np)).to(device)
+        mu0 = m0(X_t0).cpu().numpy().ravel()
+        X_t1 = torch.from_numpy(s1.transform(X_np)).to(device)
+        mu1 = m1(X_t1).cpu().numpy().ravel()
+
+    # 5) build pseudo-outcomes with correct formulas
     mask0 = (Z.ravel() == 0)
     mask1 = (Z.ravel() == 1)
 
-    # correct pseudo-outcomes:
+    # control group: D0 = μ1(x) – Y, treated group: D1 = Y – μ0(x)
     D0 = (mu1[mask0] - y.ravel()[mask0]).reshape(-1, 1)
     X0 = X[mask0]
 
     D1 = (y.ravel()[mask1] - mu0[mask1]).reshape(-1, 1)
     X1 = X[mask1]
 
-    # 5) Fit tau0 and tau1 separately
-    tau0_model, scaler_tau0, tr0, val0, rb0 = train_group(X0, D0, **train_kwargs)
+    # 6) fit τ0 and τ1 via train_group (which itself will use GPU if available)
+    tau0_model, scaler_tau0, tr0, val0, rb0 = train_group(
+        X0, D0,
+        hidden_dim=hidden_dim, lr=lr,
+        max_iter=max_iter, tol=tol,
+        patience=patience, patience_lr=patience_lr,
+        factor_lr=factor_lr
+    )
+    tau0_model = tau0_model.to(device)
     print(f"X-learner τ0: parameters from epoch {rb0}")
-    tau1_model, scaler_tau1, tr1, val1, rb1 = train_group(X1, D1, **train_kwargs)
+
+    tau1_model, scaler_tau1, tr1, val1, rb1 = train_group(
+        X1, D1,
+        hidden_dim=hidden_dim, lr=lr,
+        max_iter=max_iter, tol=tol,
+        patience=patience, patience_lr=patience_lr,
+        factor_lr=factor_lr
+    )
+    tau1_model = tau1_model.to(device)
     print(f"X-learner τ1: parameters from epoch {rb1}")
 
     return (
@@ -305,128 +340,186 @@ def train_m_learner(X, Z, y, **train_kwargs):
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from matplotlib.backends.backend_pdf import PdfPages
+    import pandas as pd
+    import time
+    import math
+    import torch
+    import numpy as np
+    import random
+    from sklearn.model_selection import train_test_split
 
     # decide on device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Running on device: {device}")    # will print either "cuda" or "cpu"
+    print(f"Running on device: {device}")
 
+    Nrow = int(1e5)
+    nb_sim = 80
+    for non_tr_percentage in [25, 10, 5, 2]:
 
-    # reproducibility settings
-    for sim in range(10):
-        print(f"\n\nRun {sim}")
-        SEED = 2025 + sim
-        random.seed(SEED)
-        np.random.seed(SEED)
-        torch.manual_seed(SEED)
-        torch.cuda.manual_seed(SEED)
-        torch.cuda.manual_seed_all(SEED)
-        torch.backends.cudnn.deterministic = True
-        torch.backends.cudnn.benchmark = False
+        # storage for per-run metrics
+        pehe_records = []
+        time_records = []
 
-        # data
-        n_samples, n_features = 1000, 1
-        X = np.random.rand(n_samples, n_features).astype(np.float32)
-        Z = np.random.binomial(1, 0.2, size=(n_samples,1)).astype(np.float32)
-        y0 = (2*X + X*X).sum(axis=1,keepdims=True)
-        y1 = (X + 3*X*X).sum(axis=1,keepdims=True)
-        y = (1-Z)*y0 + Z*y1
+        # reproducibility + simulations
+        for sim in range(nb_sim):
+            print(f"\n\nRun {sim}")
+            SEED = 2025 + sim
+            random.seed(SEED)
+            np.random.seed(SEED)
+            torch.manual_seed(SEED)
+            torch.cuda.manual_seed(SEED)
+            torch.cuda.manual_seed_all(SEED)
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
-        X_train, X_test, Z_train, Z_test, y_train, y_test, y0_t, y0_te, y1_t, y1_te = train_test_split(
-            X, Z, y, y0, y1, test_size=0.3, random_state=SEED
-        )
+            # --- generate data ---
+            n_samples, n_features = Nrow, 1
+            X = np.random.rand(n_samples, n_features).astype(np.float32)
+            Z = np.random.binomial(1, non_tr_percentage/100, size=(n_samples,1)).astype(np.float32)
+            y0 = (2*X + X*X).sum(axis=1,keepdims=True)
 
-        # hyperparams
-        params = dict(
-            max_iter=15000, tol=1e-3,
-            hidden_dim=64, lr=0.01,
-            patience=100, patience_lr=25,
-            factor_lr=0.5
-        )
-        print("Training S, T, M, X learners...\n")
-        # S
-        start_time = time.time()
-        m_s, sc_s, s_tr, s_val = train_s_learner(X_train, Z_train, y_train, **params)
-        end_time = time.time()
-        execution_time = end_time - start_time
-        print(f"predict_time : {round(execution_time,3)}")
+            y1 = (X + 3*X*X).sum(axis=1,keepdims=True)
+            #y1 = (2*X +  1.5 *X*X - 0.5 * np.sqrt(X)).sum(axis=1,keepdims=True)
+            y  = (1-Z)*y0 + Z*y1
 
-        # T
-        start_time = time.time()
-        m0, sc0, t0_tr, t0_val, m1, sc1, t1_tr, t1_val = train_t_learner(X_train, Z_train, y_train, **params)
-        end_time = time.time()
-        execution_time = end_time - start_time
-        print(f"predict_time : {round(execution_time,3)}")
+            X_train, X_test, Z_train, Z_test, y_train, y_test, y0_t, y0_te, y1_t, y1_te = \
+                train_test_split(X, Z, y, y0, y1, test_size=0.3, random_state=SEED)
 
-        # M
-        start_time = time.time()
-        m_m, sc_m, m_tr, m_val = train_m_learner(X_train, Z_train, y_train, **params)
-        end_time = time.time()
-        execution_time = end_time - start_time
-        print(f"predict_time : {round(execution_time,3)}")
+            params = dict(
+                max_iter=15000, tol=1e-3,
+                hidden_dim=64, lr=0.01,
+                patience=100, patience_lr=25,
+                factor_lr=0.5
+            )
 
-        # X
-        start_time = time.time()
-        (
-            prop_model,
+            save_learning_curve = False
+            print("Training S, T, M, X learners...\n")
+
+            # --- S learner ---
+            t0 = time.time()
+            m_s, sc_s, s_tr, s_val = train_s_learner(X_train, Z_train, y_train, **params)
+            t1 = time.time()
+            time_s = t1 - t0
+            print(f"S-learner predict_time : {round(time_s,3)}")
+
+            # --- T learner ---
+            t0 = time.time()
+            m0, sc0, t0_tr, t0_val, m1, sc1, t1_tr, t1_val = train_t_learner(X_train, Z_train, y_train, **params)
+            t1 = time.time()
+            time_t = t1 - t0
+            print(f"T-learner predict_time : {round(time_t,3)}")
+
+            # --- M learner ---
+            t0 = time.time()
+            m_m, sc_m, m_tr, m_val = train_m_learner(X_train, Z_train, y_train, **params)
+            t1 = time.time()
+            time_m = t1 - t0
+            print(f"M-learner predict_time : {round(time_m,3)}")
+
+            # --- X learner ---
+            t0 = time.time()
+            (prop_model,
             (m0, sc0), (m1, sc1),
             tau0_m, sc_tau0, x0_tr, x0_val, rb0,
             tau1_m, sc_tau1, x1_tr, x1_val, rb1
-        ) = train_x_learner(
-            X_train, Z_train, y_train, compute_t=False,
-            t_models=(m0, sc0, m1, sc1), **params
-        )
-        end_time = time.time()
-        execution_time = end_time - start_time
-        print(f"predict_time (without T part): {round(execution_time,3)}")
+            ) = train_x_learner(
+                X_train, Z_train, y_train,
+                compute_t=False, t_models=(m0, sc0, m1, sc1),
+                **params
+            )
+            t1 = time.time()
+            time_x = t1 - t0
+            print(f"X-learner predict_time (without T part): {round(time_x,3)}")
 
+            # prepare models on device & eval
+            for mdl in (m_s, m0, m1, m_m, tau0_m, tau1_m):
+                mdl.to(device).eval()
 
-        # PEHE
-        pehe = {}
-        for name, est in [
-            ('S', lambda x: (m_s(torch.from_numpy(sc_s.transform(np.concatenate([x,[[0.]],],axis=1).astype(np.float32)))).item(),
-                              m_s(torch.from_numpy(sc_s.transform(np.concatenate([x,[[1.]],],axis=1).astype(np.float32)))).item())),
-            ('T', lambda x: (m0(torch.from_numpy(sc0.transform(x.astype(np.float32)))).item(),
-                              m1(torch.from_numpy(sc1.transform(x.astype(np.float32)))).item())),
-            ('M', lambda x: tuple(
-                                    m_m(torch.from_numpy(sc_m.transform(x.astype(np.float32)))).detach().numpy().ravel()
-                            )
-            ),
-            ('X', lambda x: (
-                            0.0, # the X learner return directly tau and not the 2 surface so we write tau as tau = tau - 0
-                            (1 - prop_model.predict_proba(np.atleast_2d(x))[:, 1]) *
-                            tau1_m(torch.from_numpy(sc_tau1.transform(np.atleast_2d(x)))).item() +
-                            prop_model.predict_proba(np.atleast_2d(x))[:, 1] *
-                            tau0_m(torch.from_numpy(sc_tau0.transform(np.atleast_2d(x)))).item()
-                        ))
-]:
-            errs = []
-            for i in range(len(X_test)):
-                x_i = X_test[i:i+1]
-                true_eff = (y1_te[i] - y0_te[i]).item()
-                y0_hat, y1_hat = est(x_i)
-                errs.append(( (y1_hat - y0_hat) - true_eff )**2)
-            pehe[name] = math.sqrt(np.mean(errs))
+            # define estimators
+            def estimate_S(x_np):
+                x0 = np.concatenate([x_np, [[0.]]], axis=1).astype(np.float32)
+                x1 = np.concatenate([x_np, [[1.]]], axis=1).astype(np.float32)
+                with torch.no_grad():
+                    t0 = m_s(torch.from_numpy(sc_s.transform(x0)).to(device)).item()
+                    t1 = m_s(torch.from_numpy(sc_s.transform(x1)).to(device)).item()
+                return t0, t1
 
-        print("PEHE results:")
-        for learner, val in pehe.items():
-            print(f"{learner:>3s}-learner: {val:.6e}")
+            def estimate_T(x_np):
+                x_np = x_np.astype(np.float32)
+                with torch.no_grad():
+                    t0 = m0(torch.from_numpy(sc0.transform(x_np)).to(device)).item()
+                    t1 = m1(torch.from_numpy(sc1.transform(x_np)).to(device)).item()
+                return t0, t1
 
-        # save curves
-        fname = f'learning_curves_{sim}_STXM.pdf'
-        with PdfPages(fname) as pdf:
-            for title, tr, val in [
-                ('S-learner', s_tr, s_val),
-                ('T-learner (Z=0)', t0_tr, t0_val),
-                ('T-learner (Z=1)', t1_tr, t1_val),
-                ('M-learner', m_tr, m_val),
-                ('X-learner (Tau 0)', x0_tr, x0_val),
-                ('X-learner (Tau 1)', x1_tr, x1_val),
-            ]:
-                plt.figure()
-                plt.plot(tr, label='Train Loss')
-                plt.plot(val, label='Val Loss')
-                plt.yscale('log')
-                plt.title(title + ' Learning Curve')
-                plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend()
-                pdf.savefig(); plt.close()
-        print(f"Saved learning curves to {fname}")
+            def estimate_M(x_np):
+                x_np = x_np.astype(np.float32)
+                with torch.no_grad():
+                    out = m_m(torch.from_numpy(sc_m.transform(x_np)).to(device)).cpu().numpy().ravel()
+                return out[0], out[1]
+
+            def estimate_X(x_np):
+                x_np = x_np.astype(np.float32).reshape(1, -1)
+                p = prop_model.predict_proba(x_np)[:,1].item()
+                with torch.no_grad():
+                    tau0 = tau0_m(torch.from_numpy(sc_tau0.transform(x_np)).to(device)).item()
+                    tau1 = tau1_m(torch.from_numpy(sc_tau1.transform(x_np)).to(device)).item()
+                return 0.0, (1-p)*tau0 + p*tau1
+
+            # --- compute PEHE on test set ---
+            pehe = {}
+            for name, fn in [('S',estimate_S),('T',estimate_T),('M',estimate_M),('X',estimate_X)]:
+                errs = []
+                for i in range(len(X_test)):
+                    x_i = X_test[i:i+1]
+                    true_eff = (y1_te[i] - y0_te[i]).item()
+                    y0_hat, y1_hat = fn(x_i)
+                    errs.append(((y1_hat - y0_hat) - true_eff)**2)
+                pehe[name] = math.sqrt(np.mean(errs))
+
+            print("PEHE results:")
+            for name, val in pehe.items():
+                print(f"  {name}-learner: {val:.6e}")
+
+            # --- record metrics ---
+            pehe_records.append({'sim': sim, **pehe})
+            time_records.append({'sim': sim, 'S': time_s, 'T': time_t, 'M': time_m, 'X': time_x})
+
+            # --- save learning curves ---
+            if save_learning_curve:
+                fname = f'learning_curves_{sim}_STXM.pdf'
+                with PdfPages(fname) as pdf:
+                    for title, tr, val in [
+                        ('S-learner', s_tr, s_val),
+                        ('T-learner (Z=0)', t0_tr, t0_val),
+                        ('T-learner (Z=1)', t1_tr, t1_val),
+                        ('M-learner', m_tr, m_val),
+                        ('X-learner (Tau 0)', x0_tr, x0_val),
+                        ('X-learner (Tau 1)', x1_tr, x1_val),
+                    ]:
+                        plt.figure()
+                        plt.plot(tr, label='Train Loss')
+                        plt.plot(val, label='Val Loss')
+                        plt.yscale('log')
+                        plt.title(title + ' Learning Curve')
+                        plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend()
+                        pdf.savefig(); plt.close()
+                print(f"Saved learning curves to {fname}")
+
+        # --- end of all sims: build dataframes and export ---
+        df_pehe  = pd.DataFrame(pehe_records).set_index('sim')
+        df_times = pd.DataFrame(time_records).set_index('sim')
+        df_pehe.to_csv(f'pehe_{nb_sim}_tr_per_{non_tr_percentage}_size_{Nrow}.csv')
+        df_times.to_csv(f'times_{nb_sim}_tr_per_{non_tr_percentage}_size_{Nrow}.csv')
+        print("\nWrote pehe.csv and times.csv")
+
+        # --- compute and print Q1, median, Q3 ---
+        def print_quartiles(df, title):
+            q1 = df.quantile(0.25)
+            m  = df.quantile(0.50)
+            q3 = df.quantile(0.75)
+            print(f"\n{title} statistics (Q1, median, Q3):")
+            for col in df.columns:
+                print(f"  {col}: {q1[col]:8.3e}, {m[col]:8.3e}, {q3[col]:8.3e}")
+
+        print_quartiles(df_pehe,  "PEHE")
+        print_quartiles(df_times, "Time")
