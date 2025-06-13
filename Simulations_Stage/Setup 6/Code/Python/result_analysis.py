@@ -2,9 +2,17 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 
+Nrow = int(1e5)
+nb_sim = 80
+non_tr_percentage = 2
+
+suffix = f"{nb_sim}_tr_per_{non_tr_percentage}_size_{Nrow}"
+
+basedir_setup_6_res = "/home/onyxia/work/EstITE/Simulations_Stage/Setup 6/Code/Results/"
+
 # --- 1) load the CSVs ----
-df_pehe  = pd.read_csv('pehe.csv', index_col='sim')
-df_times = pd.read_csv('times.csv', index_col='sim')
+df_pehe  = pd.read_csv(f'{basedir_setup_6_res}pehe_{suffix}.csv', index_col='sim')
+df_times = pd.read_csv(f'{basedir_setup_6_res}times_{suffix}.csv', index_col='sim')
 
 # --- 2) PEHE boxplot ----
 plt.figure()
@@ -16,7 +24,7 @@ plt.xlabel('Learner')
 # Set y-axis limits to avoid flat plot due to outliers
 plt.ylim(bottom=df_pehe.min().min() * 0.9, top=df_pehe.quantile(0.95).max() * 1.1)
 plt.tight_layout()
-plt.savefig('pehe_boxplot.png')
+plt.savefig(f'{basedir_setup_6_res}pehe_boxplot_{suffix}.png')
 plt.close()
 
 # --- 3) Time boxplot ----
@@ -26,7 +34,7 @@ plt.title('Execution time by learner')
 plt.ylabel('Time (seconds)')
 plt.xlabel('Learner')
 plt.tight_layout()
-plt.savefig('time_boxplot.png')
+plt.savefig(f'{basedir_setup_6_res}time_boxplot_{suffix}.png')
 plt.close()
 
 print("Saved: pehe_boxplot.png, time_boxplot.png")
@@ -52,7 +60,7 @@ def compute_and_export_quantiles(df, name, file_handle):
     file_handle.write("\n")
 
 # open the text file for writing
-with open('quantiles.txt', 'w') as txt:
+with open(f'quantiles_{suffix}.txt', 'w') as txt:
     compute_and_export_quantiles(df_pehe,  "PEHE", txt)
     compute_and_export_quantiles(df_times, "Execution time (s)", txt)
 

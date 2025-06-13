@@ -386,13 +386,13 @@ if __name__ == "__main__":
                 train_test_split(X, Z, y, y0, y1, test_size=0.3, random_state=SEED)
 
             params = dict(
-                max_iter=15000, tol=1e-3,
+                max_iter=50000, tol=1e-2,
                 hidden_dim=64, lr=0.01,
                 patience=100, patience_lr=25,
                 factor_lr=0.5
             )
 
-            save_learning_curve = False
+            save_learning_curve = True
             print("Training S, T, M, X learners...\n")
 
             # --- S learner ---
@@ -485,8 +485,8 @@ if __name__ == "__main__":
             time_records.append({'sim': sim, 'S': time_s, 'T': time_t, 'M': time_m, 'X': time_x})
 
             # --- save learning curves ---
-            if save_learning_curve:
-                fname = f'learning_curves_{sim}_STXM.pdf'
+            if save_learning_curve and sim < 5:
+                fname = f'learning_curves_{sim}_STXM_tr_per_{non_tr_percentage}_size_{Nrow}.pdf'
                 with PdfPages(fname) as pdf:
                     for title, tr, val in [
                         ('S-learner', s_tr, s_val),
