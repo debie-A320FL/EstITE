@@ -12,6 +12,8 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
+import torch.nn.functional as F
+from scipy.special import expit  # the logistic sigmoid
 
 def train_group(
     X, y,
@@ -22,12 +24,23 @@ def train_group(
     patience=10,
     patience_lr=20,
     factor_lr=0.25,
+    binary=False
 ):
     """
     Generic training + rollback patience, with optional GPU support.
     Returns: model, scaler, train_losses, val_losses, rollback_epoch
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # choose loss fn
+    if binary:
+        loss_fn = nn.BCEWithLogitsLoss()
+        print("Using binary loss")
+    else:
+        loss_fn = nn.MSELoss()
+        print("Using continuous loss")
+
+    
 
     # split + scale
     X_tr_np, X_val_np, y_tr_np, y_val_np = train_test_split(
@@ -69,7 +82,9 @@ def train_group(
         # — training —
         model.train()
         optimizer.zero_grad()
-        loss_tr = nn.MSELoss()(model(X_tr), y_tr)
+        # loss_tr = nn.MSELoss()(model(X_tr), y_tr)
+        logits = model(X_tr)            # raw outputs, shape (N,1)
+        loss_tr = loss_fn(logits, y_tr)
         loss_tr.backward()
         optimizer.step()
 
@@ -79,7 +94,9 @@ def train_group(
         # — validation —
         model.eval()
         with torch.no_grad():
-            loss_val = nn.MSELoss()(model(X_val), y_val).item()
+            # loss_val = nn.MSELoss()(model(X_val), y_val).item()
+            val_logits = model(X_val)
+            loss_val = loss_fn(val_logits, y_val).item()
         val_losses.append(loss_val)
 
         # LR scheduler
@@ -118,9 +135,11 @@ def train_multitask_group(
     patience=10,
     patience_lr=20,
     factor_lr=0.25,
+    binary=False
 ):
     """
     Multi‐task training + rollback patience, with optional GPU support.
+    If binary=True, uses BCEWithLogitsLoss on each head; else uses MSE.
     Returns: model, scaler, train_losses, val_losses, rollback_epoch
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -133,7 +152,7 @@ def train_multitask_group(
     X_tr_np = scaler.fit_transform(X_tr_np.astype(np.float32))
     X_val_np = scaler.transform(X_val_np.astype(np.float32))
 
-    # to tensors on device
+    # to tensors
     X_tr = torch.from_numpy(X_tr_np).to(device)
     Z_tr = torch.from_numpy(Z_tr_np.astype(np.float32)).to(device)
     y_tr = torch.from_numpy(y_tr_np.astype(np.float32)).to(device)
@@ -154,7 +173,7 @@ def train_multitask_group(
         nn.ReLU(),
         nn.Linear(hidden_dim, hidden_dim),
         nn.ReLU(),
-        nn.Linear(hidden_dim, 2),
+        nn.Linear(hidden_dim, 2),   # two heads: control & treated
     ).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -165,43 +184,65 @@ def train_multitask_group(
 
     prev_lr = optimizer.param_groups[0]['lr']
     train_losses, val_losses = [], []
-    best_val, no_imp   = float('inf'), 0
-    recent_states      = deque(maxlen=patience)
-    rollback_epoch     = None
+    best_val, no_imp = float('inf'), 0
+    recent_states = deque(maxlen=patience)
+    rollback_epoch = None
+
+    if binary:
+        print("Using binary loss")
+    else:
+        print("Using continuous loss")
 
     for epoch in range(1, max_iter+1):
-        # — train —
+        # — TRAIN —
         model.train()
         optimizer.zero_grad()
-        out_tr = model(X_tr)                # [N,2]
-        target_tr = y_tr.repeat(1, 2)       # [N,2]
-        mask_tr   = torch.cat([1 - Z_tr, Z_tr], dim=1)
-        loss_tr = ((out_tr - target_tr)**2 * mask_tr).sum(dim=1).mean()
+        out_tr = model(X_tr)               # [N,2]
+        target_tr = y_tr.repeat(1, 2)      # [N,2]
+        mask_tr = torch.cat([1 - Z_tr, Z_tr], dim=1)  # select correct head
+
+        if binary:
+            # per-element BCE, then mask & average
+            loss_mat = F.binary_cross_entropy_with_logits(
+                out_tr, target_tr, reduction='none'
+            )
+            loss_tr = (loss_mat * mask_tr).sum(dim=1).mean()
+        else:
+            # masked MSE
+            loss_tr = ((out_tr - target_tr)**2 * mask_tr).sum(dim=1).mean()
+
         loss_tr.backward()
         optimizer.step()
 
         train_losses.append(loss_tr.item())
         recent_states.append(copy.deepcopy(model.state_dict()))
 
-        # — val —
+        # — VALIDATION —
         model.eval()
         with torch.no_grad():
             out_val = model(X_val)
             target_val = y_val.repeat(1, 2)
-            mask_val   = torch.cat([1 - Z_val, Z_val], dim=1)
-            loss_val = ((out_val - target_val)**2 * mask_val).sum(dim=1).mean().item()
+            mask_val = torch.cat([1 - Z_val, Z_val], dim=1)
+
+            if binary:
+                loss_mat = F.binary_cross_entropy_with_logits(
+                    out_val, target_val, reduction='none'
+                )
+                loss_val = (loss_mat * mask_val).sum(dim=1).mean().item()
+            else:
+                loss_val = ((out_val - target_val)**2 * mask_val).sum(dim=1).mean().item()
 
         val_losses.append(loss_val)
-        scheduler.step(loss_val)
 
-        # LR logging
+        # LR scheduler
+        scheduler.step(loss_val)
         curr_lr = optimizer.param_groups[0]['lr']
         if curr_lr != prev_lr:
             print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
             prev_lr = curr_lr
 
-        # early‐stop / rollback
-        rel_imp = (best_val - loss_val)/best_val if best_val < float('inf') else float('inf')
+        # EARLY STOP + ROLLBACK
+        rel_imp = ((best_val - loss_val) / best_val) if best_val < float('inf') else float('inf')
         if rel_imp >= tol:
             best_val, no_imp = loss_val, 0
         else:
@@ -218,7 +259,6 @@ def train_multitask_group(
             print(f"M-learner: reached max_iter={max_iter}, using epoch {rollback_epoch}.")
 
     return model, scaler, train_losses, val_losses, rollback_epoch
-
 
 def train_s_learner(X, Z, y, **train_kwargs):
     Xz = np.concatenate([X, Z], axis=1)
@@ -238,52 +278,42 @@ def train_t_learner(X, Z, y, **train_kwargs):
 
 
 def train_x_learner(
-    X, Z, y,
+    X,
+    Z,
+    y,
     compute_t: bool = True,
     t_models: tuple = None,
-    hidden_dim=64,
-    lr=1e-3,
-    max_iter=1000,
-    tol=1e-3,
-    patience=10,
-    patience_lr=20,
-    factor_lr=0.25,
+    **train_kwargs       # gathers hidden_dim, lr, max_iter, tol, patience, patience_lr, factor_lr, binary, etc.
 ):
     """
     X-learner with two τ-models, GPU-enabled if available.
+    Any keyword in train_kwargs (e.g. binary=True, loss_type="bce",
+    hidden_dim, lr, max_iter, tol, patience, ...) will be forwarded
+    to train_t_learner() and train_group().
 
     Returns:
-      prop_model,
-      (m0, scaler0), (m1, scaler1),
-      tau0_model, scaler_tau0, tr0, val0, rollback0,
-      tau1_model, scaler_tau1, tr1, val1, rollback1
+      - prop_model: sklearn logistic regression for propensity
+      - (m0, s0), (m1, s1): T-learner outcome models + scalers
+      - tau0_model, scaler_tau0, tr0_losses, val0_losses, rollback0
+      - tau1_model, scaler_tau1, tr1_losses, val1_losses, rollback1
     """
-    import torch
-    from sklearn.linear_model import LogisticRegression
-
-    # 0) pick device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-    # 1) estimate propensity on CPU (scikit-learn)
+    # 1) fit propensity model (on CPU)
     prop_model = LogisticRegression().fit(X, Z.ravel())
 
-    # 2) (re)compute or unpack T-learner outcome models
+    # 2) fit or unpack T-learner outcome models
     if compute_t:
-        m0, s0, _, _, m1, s1, _, _ = train_t_learner(
+        m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(
             X, Z, y,
-            hidden_dim=hidden_dim, lr=lr,
-            max_iter=max_iter, tol=tol,
-            patience=patience, patience_lr=patience_lr,
-            factor_lr=factor_lr
+            **train_kwargs
         )
     else:
         m0, s0, m1, s1 = t_models
 
-    # 3) move T-models to device
-    m0 = m0.to(device)
-    m1 = m1.to(device)
+    # 3) move outcome models to device
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    m0, m1 = m0.to(device), m1.to(device)
 
-    # 4) compute mu0(x), mu1(x) on all X
+    # 4) compute μ₀(x), μ₁(x) on entire X
     X_np = X.astype(np.float32)
     with torch.no_grad():
         X_t0 = torch.from_numpy(s0.transform(X_np)).to(device)
@@ -291,37 +321,31 @@ def train_x_learner(
         X_t1 = torch.from_numpy(s1.transform(X_np)).to(device)
         mu1 = m1(X_t1).cpu().numpy().ravel()
 
-    # 5) build pseudo-outcomes with correct formulas
+    # 5) build pseudo‐outcomes D₀ and D₁
     mask0 = (Z.ravel() == 0)
     mask1 = (Z.ravel() == 1)
 
-    # control group: D0 = μ1(x) – Y, treated group: D1 = Y – μ0(x)
     D0 = (mu1[mask0] - y.ravel()[mask0]).reshape(-1, 1)
     X0 = X[mask0]
 
     D1 = (y.ravel()[mask1] - mu0[mask1]).reshape(-1, 1)
     X1 = X[mask1]
 
-    # 6) fit τ0 and τ1 via train_group (which itself will use GPU if available)
+    # 6) fit τ₀ via train_group
     tau0_model, scaler_tau0, tr0, val0, rb0 = train_group(
         X0, D0,
-        hidden_dim=hidden_dim, lr=lr,
-        max_iter=max_iter, tol=tol,
-        patience=patience, patience_lr=patience_lr,
-        factor_lr=factor_lr
+        **train_kwargs
     )
     tau0_model = tau0_model.to(device)
-    print(f"X-learner τ0: parameters from epoch {rb0}")
+    print(f"X-learner τ₀: parameters from epoch {rb0}")
 
+    # 7) fit τ₁ via train_group
     tau1_model, scaler_tau1, tr1, val1, rb1 = train_group(
         X1, D1,
-        hidden_dim=hidden_dim, lr=lr,
-        max_iter=max_iter, tol=tol,
-        patience=patience, patience_lr=patience_lr,
-        factor_lr=factor_lr
+        **train_kwargs
     )
     tau1_model = tau1_model.to(device)
-    print(f"X-learner τ1: parameters from epoch {rb1}")
+    print(f"X-learner τ₁: parameters from epoch {rb1}")
 
     return (
         prop_model,
@@ -352,9 +376,9 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Running on device: {device}")
 
-    Nrow = int(1e5)
-    nb_sim = 80
-    for non_tr_percentage in [25, 10, 5, 2]:
+    Nrow = int(1e4)
+    nb_sim = 13
+    for non_tr_percentage in [10]:
 
         # storage for per-run metrics
         pehe_records = []
@@ -376,10 +400,23 @@ if __name__ == "__main__":
             n_samples, n_features = Nrow, 1
             X = np.random.rand(n_samples, n_features).astype(np.float32)
             Z = np.random.binomial(1, non_tr_percentage/100, size=(n_samples,1)).astype(np.float32)
-            y0 = (2*X + X*X).sum(axis=1,keepdims=True)
+            # y0 = (2*X + X*X).sum(axis=1,keepdims=True)
 
-            y1 = (X + 3*X*X).sum(axis=1,keepdims=True)
+            # y1 = (X + 3*X*X).sum(axis=1,keepdims=True)
             #y1 = (2*X +  1.5 *X*X - 0.5 * np.sqrt(X)).sum(axis=1,keepdims=True)
+
+            # define your raw scores for control/treatment
+            score0 = (0.5 + 10*X + 50 * X**2).sum(axis=1)          # shape (n,)
+            score1 = (- 0.5 * X - 20 *X**2).sum(axis=1)
+
+            # map them to probabilities via sigmoid
+            p0 = expit(score0)                        # in (0,1)
+            p1 = expit(score1)
+
+            # now draw Bernoulli with those probabilities
+            y0 = np.random.binomial(1, p0).reshape(-1,1).astype(np.float32)
+            y1 = np.random.binomial(1, p1).reshape(-1,1).astype(np.float32)
+
             y  = (1-Z)*y0 + Z*y1
 
             X_train, X_test, Z_train, Z_test, y_train, y_test, y0_t, y0_te, y1_t, y1_te = \
@@ -389,7 +426,8 @@ if __name__ == "__main__":
                 max_iter=50000, tol=1e-2,
                 hidden_dim=64, lr=0.01,
                 patience=100, patience_lr=25,
-                factor_lr=0.5
+                factor_lr=0.5, 
+                binary=False
             )
 
             save_learning_curve = True
@@ -465,6 +503,8 @@ if __name__ == "__main__":
                     tau1 = tau1_m(torch.from_numpy(sc_tau1.transform(x_np)).to(device)).item()
                 return 0.0, (1-p)*tau0 + p*tau1
 
+
+            # todo: make the pehe compute faster (parallelizing, etc)
             # --- compute PEHE on test set ---
             pehe = {}
             for name, fn in [('S',estimate_S),('T',estimate_T),('M',estimate_M),('X',estimate_X)]:
@@ -475,6 +515,13 @@ if __name__ == "__main__":
                     y0_hat, y1_hat = fn(x_i)
                     errs.append(((y1_hat - y0_hat) - true_eff)**2)
                 pehe[name] = math.sqrt(np.mean(errs))
+
+            true_cate = (y1_te - y0_te).ravel()  # shape (n_test,)
+
+            mean_cate = np.mean(true_cate)
+            pehe['Mean-CATE'] = np.sqrt(np.mean((mean_cate - true_cate)**2))
+
+            pehe['Zero-CATE'] = np.sqrt(np.mean((0.0 - true_cate)**2))
 
             print("PEHE results:")
             for name, val in pehe.items():
