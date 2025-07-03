@@ -1,4 +1,5 @@
 rm(list = ls())
+gc(verbose = FALSE)
 
 ### LIBRARIES
 # Install devtools if not already installed
@@ -41,6 +42,15 @@ if (!require("future")) {
   install.packages("future")
 }
 
+if (!require("caret")) {
+  install.packages("caret")
+}
+
+if (!require("randomForest")) {
+  install.packages("randomForest")
+}
+
+
 # Load the libraries
 library(tidyverse)
 library(SparseBCF)
@@ -49,7 +59,8 @@ library(grf)
 library(rlearner)
 library(causalToolbox)
 library(future)
-
+library(caret)
+library(randomForest)
 
 # Other needed packages
 
@@ -62,6 +73,7 @@ library(nnet)
 # library(forestry)
 
 source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5c/Code/R/function_hypparam_optimisation.R")
+source("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5c/Code/R/learner_function.R")
 
 availableCores() # 8 processes in total
 plan(multisession)  # use future() to assign and value() function to block subsequent evaluations
@@ -88,7 +100,7 @@ r_loss <- function(y, mu, z, pi, tau) mean(((y - mu) - (z - pi) * tau)^2)
 #curr_dir <- dirname(rstudioapi::getSourceEditorContext()$path)
 #setwd(curr_dir); setwd('./../../')
 
-setwd("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5")
+setwd("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5c")
 
 hyperparams <- read.csv("./../Setup 1a/Data/hyperparams.csv")
 
@@ -97,10 +109,11 @@ data_train_test <- read.csv("./../Setup 1a/Data/simulated_1M_data.csv")
 data_validation <- read.csv("./../Setup 1a/Data/simulated_10K_data_validation.csv")
 size_sample_val = nrow(data_validation)
 
-size_sample = 1e4
-binary = TRUE # binary value for Y ?
+# size_sample = 1e4
+binary = TRUE # binary value for Y ?  
 
-
+list_size_sample <- c(5e4, 1e5, 5e5, 1e6)
+for (size_sample in list_size_sample) {
 
 list_treatment_percentile <- c(10)
 for (treatment_percentile in list_treatment_percentile) {
@@ -120,7 +133,7 @@ for (treatment_percentile in list_treatment_percentile) {
   ### OPTIONS
   B = 10   # Num of Simulations
 
-  MLearners = c('R-LASSO',"S-RF","T-RF","X-RF")
+  MLearners = c('R-LASSO',"S-RF","T-RF","X-RF", "RA-RF", "DR-RF", "R-RF")
 
   nb_learner = length((MLearners))
 
@@ -139,15 +152,15 @@ for (treatment_percentile in list_treatment_percentile) {
   )
   Liste_time <- map(mylist, `colnames<-`, MLearners)
   rm(mylist)
+  gc(verbose = FALSE)
 
   system.time(
   
   
   for (i in 1:B) {
     
-    gc()
-    
     cat("\n\n***** Iteration", i, " - treatment_percentile : ",treatment_percentile, "*****")
+    cat("\n\n***** Iteration", i, " - size_sample : ",size_sample, "*****")
     
     
     if(i<=500){set.seed(502 + i*5); seed = 502 + i*5}
@@ -171,7 +184,7 @@ for (treatment_percentile in list_treatment_percentile) {
     
     # ################ S-RF
 
-    if (i == 1){
+    if (1){
       cat("\n\nSearching for best S_RF parameters")
       start_time <- Sys.time()
       SRF_result <- optimize_and_evaluate_S_RF_2(
@@ -200,7 +213,7 @@ for (treatment_percentile in list_treatment_percentile) {
                  nthread = 0)
 
 
-    train_est = EstimateCate(SRF, train_augmX)
+    # train_est = EstimateCate(SRF, train_augmX)
     test_est = EstimateCate(SRF, test_augmX)
     
     end_time <- Sys.time()
@@ -224,12 +237,12 @@ for (treatment_percentile in list_treatment_percentile) {
     cat("Perf CATC on test data : ")
     cat(Results$CATC_Test_PEHE[i, 'S-RF'])   
 
-    rm(SRF)
-
+    rm(SRF, SRF_result,test_est)
+    gc(verbose = FALSE)
 
     # #################### T-RF
 
-    if (i == 1){
+    if (1){
       cat("\n\nSearching for best T_RF parameters")
       start_time <- Sys.time()
       TRF_result <- optimize_and_evaluate_T_RF(
@@ -266,7 +279,7 @@ for (treatment_percentile in list_treatment_percentile) {
                   splitratio = 0.5,
                   middleSplit = FALSE
                 ))
-    train_est = EstimateCate(TRF, train_augmX)
+    # train_est = EstimateCate(TRF, train_augmX)
     test_est = EstimateCate(TRF, test_augmX)
     
     end_time <- Sys.time()
@@ -290,11 +303,12 @@ for (treatment_percentile in list_treatment_percentile) {
     cat("Perf CATC on test data : ")
     cat(Results$CATC_Test_PEHE[i, 'T-RF']) 
 
-    rm(TRF)
+    rm(TRF, TRF_result,test_est)
+    gc(verbose = FALSE)
     
     # #################### X-RF
 
-    if (i == 1){
+    if (1){
       cat("\n\nSearching for best X_RF parameters")
       start_time <- Sys.time()
       XRF_result <- optimize_and_evaluate_X_RF(
@@ -345,7 +359,7 @@ for (treatment_percentile in list_treatment_percentile) {
                   middleSplit = FALSE
                 ))
 
-    train_est = EstimateCate(XRF, train_augmX[,-ncol(train_augmX)])
+    #  = EstimateCate(XRF, train_augmX[,-ncol(train_augmX)])
     test_est = EstimateCate(XRF, test_augmX[,-ncol(test_augmX)])
     
     end_time <- Sys.time()
@@ -369,13 +383,13 @@ for (treatment_percentile in list_treatment_percentile) {
     cat("Perf on CATC test data : ")
     cat(Results$CATC_Test_PEHE[i, 'X-RF']) 
 
-    rm(XRF)
-
+    rm(XRF,XRF_result,test_est)
+    gc(verbose = FALSE)
     
     
     ######################## R-Lasso Regression
     
-    if (i == 1){
+    if (1){
       cat("\nSearching for best rlasso parameters")
       start_time <- Sys.time()
       rlass_result <- optimize_and_evaluate_rlasso(
@@ -394,7 +408,7 @@ for (treatment_percentile in list_treatment_percentile) {
                      lambda_choice = "lambda.min", rs = FALSE,
                      alpha = rlass_result$best_alpha)
     
-    train_est = predict(RLASSO, train_augmX[, -ncol(train_augmX)])
+    # train_est = predict(RLASSO, train_augmX[, -ncol(train_augmX)])
     test_est = predict(RLASSO, test_augmX[, -ncol(train_augmX)])
     
     end_time <- Sys.time()
@@ -418,7 +432,171 @@ for (treatment_percentile in list_treatment_percentile) {
     cat("Perf on test data : ")
     cat(Results$CATC_Test_PEHE[i, 'R-LASSO'])
 
-    rm(RLASSO)
+    rm(RLASSO,rlass_result,test_est)
+    gc(verbose = FALSE)
+
+    # Common parameter for RA, R, and DR-RF
+    param_ranges = list(
+      sample.fraction = c(0.00001,0.00005,0.0001, 0.0005, 0.001,0.005, 0.01,0.1, 0.2, 0.3, 0.5),
+      mtry = c(1, 2, 3, 4),
+      nodesizeSpl = c(1, 3, 5, 10, 15, 20, 25, 30),
+      nodesizeAvg = c(1, 3, 5, 10, 15, 20, 25, 30),
+      ntree = c(1000, 1500, 2000, 3000, 5000, 10000, 300, 500)
+    )
+
+    # RA-RF
+
+    start_time <- Sys.time()
+    best_ra <- RA_RF_learner_optimize(
+      train_X   = train_augmX[,-ncol(train_augmX)],
+      train_y   = y_train,
+      train_w   = z_train,
+      val_X     = val_augmX[z_val == 1, ],
+      val_CATT  = val_CATT,
+      param_ranges <- param_ranges,
+      verbose = TRUE
+    )
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    print("RA-RF opti_time : ")
+    print(execution_time)
+
+    start_time <- Sys.time()
+    fit_ra  <- RA_RF_learner_fit(X = train_augmX[, -ncol(train_augmX)], y = y_train, w = z_train,
+          params_mu0 =best_ra$best_mu0,
+          params_mu1=best_ra$best_mu1,
+          params_cat=best_ra$best_cat
+          )
+    test_est <- RA_RF_learner_predict(fit_ra, newdata = test_augmX[,-ncol(test_augmX)])
+
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'RA-RF'] = as.numeric(execution_time, units = "secs")
+
+    cat("\n\nRA-RF_execution_time : ")
+    print(execution_time)
+
+    # CATT 
+    Results$CATT_Test_Bias[i, 'RA-RF'] = bias(Test_CATT, test_est[z_test == 1])
+    Results$CATT_Test_PEHE[i, 'RA-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
+    
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'RA-RF'])
+
+    # CATC
+    Results$CATC_Test_Bias[i, 'RA-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    Results$CATC_Test_PEHE[i, 'RA-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    
+    cat("Perf on test data : ")
+    cat(Results$CATC_Test_PEHE[i, 'RA-RF'])
+
+
+    rm(best_ra,fit_ra,test_est)
+    gc(verbose = FALSE)
+
+    # DR-RF
+
+    start_time <- Sys.time()
+    best_params <- DR_RF_learner_optimize(
+      train_X   = train_augmX[,-ncol(train_augmX)],
+      train_y   = y_train,
+      train_t   = z_train,
+      val_X     = val_augmX[z_val == 1, ],
+      val_CATT  = val_CATT,
+      param_ranges <- param_ranges,
+      verbose = TRUE
+    )
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    print("DR-RF opti_time : ")
+    print(execution_time)
+
+    start_time <- Sys.time()
+    fit_res     <- DR_RF_learner_fit(X = train_augmX[, -ncol(train_augmX)], y = y_train, t = z_train,
+          params_pi=best_params$best_pi,
+          params_mu0=best_params$best_mu0,
+          params_mu1=best_params$best_mu1,
+          params_cat=best_params$best_cat
+          )
+    test_est  <- DR_RF_learner_predict(fit_res, newdata = test_augmX[,-ncol(test_augmX)])
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'DR-RF'] = as.numeric(execution_time, units = "secs")
+
+    cat("\n\nDR-RF_execution_time : ")
+    print(execution_time)
+
+    # CATT 
+    Results$CATT_Test_Bias[i, 'DR-RF'] = bias(Test_CATT, test_est[z_test == 1])
+    Results$CATT_Test_PEHE[i, 'DR-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
+    
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'DR-RF'])
+
+    # CATC
+    Results$CATC_Test_Bias[i, 'DR-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    Results$CATC_Test_PEHE[i, 'DR-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    
+    cat("Perf on test data : ")
+    cat(Results$CATC_Test_PEHE[i, 'DR-RF'])
+
+    rm(best_params,fit_res,test_est)
+    gc(verbose = FALSE)
+
+    # R-RF
+
+    start_time <- Sys.time()
+    best_rloss <- r_RF_learner_optimize(
+      train_X   = train_augmX[,-ncol(train_augmX)],
+      train_y   = y_train,
+      train_w   = z_train,
+      val_X     = val_augmX[z_val == 1, ],
+      val_CATT  = val_CATT,
+    param_ranges <- param_ranges,
+      seed=42, verbose=TRUE
+    )
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    print("R-RF opti_time : ")
+    print(execution_time)
+
+    start_time <- Sys.time()
+    fit_rloss  <- r_RF_learner_fit(X = train_augmX[, -ncol(train_augmX)], y = y_train, w = z_train,
+          params_m = best_rloss$best_m,
+          params_pi= best_rloss$best_pi,
+          params_cat = best_rloss$best_c
+          )
+    test_est <- r_RF_learner_predict(fit_rloss, newdata = test_augmX[,-ncol(test_augmX)])
+    
+    end_time <- Sys.time()
+    execution_time <- end_time - start_time
+    Liste_time$execution_time[i, 'R-RF'] = as.numeric(execution_time, units = "secs")
+
+    cat("\n\nR-RF_execution_time : ")
+    print(execution_time)
+
+    # CATT 
+    Results$CATT_Test_Bias[i, 'R-RF'] = bias(Test_CATT, test_est[z_test == 1])
+    Results$CATT_Test_PEHE[i, 'R-RF'] = PEHE(Test_CATT, test_est[z_test == 1])
+    
+    cat("Perf on test data : ")
+    cat(Results$CATT_Test_PEHE[i, 'R-RF'])
+
+    # CATC
+    Results$CATC_Test_Bias[i, 'R-RF'] = bias(Test_CATC, test_est[z_test == 0])
+    Results$CATC_Test_PEHE[i, 'R-RF'] = PEHE(Test_CATC, test_est[z_test == 0])
+    
+    cat("Perf on test data : ")
+    cat(Results$CATC_Test_PEHE[i, 'R-RF'])
+
+    rm(best_rloss,fit_rloss,test_est)
+
+
+    rm(res_train_test,train_augmX,z_train,y_train)
+    rm(test_augmX,z_test,y_test,Test_CATT,Test_CATC)
+    gc(verbose = FALSE)
+
   }
   
 )
@@ -436,6 +614,9 @@ print(sapply( names(Liste_time), function(x) colMeans(Liste_time[[x]]) ))
 #print("\nSD_time\n")
 #print(sapply( names(Liste_time), function(x) apply(Liste_time[[x]], 2, function(y) MC_se(y, B)) ))
 
+
+rm(res_val,val_augmX,z_val,y_val,val_CATT)
+gc(verbose = FALSE)
 
 cat("\n\n\n")
 
@@ -464,4 +645,5 @@ if (!dir.exists(directory_path)) {
  write.csv(Liste_time$execution_time, file = paste0(getwd(), "/Results/Execution time_R_", B, "_treat_p_",treatment_percentile, "_Nsize_",size_sample, ".csv"))
 
 
+}
 }

@@ -74,6 +74,7 @@ optimize_and_evaluate_S_RF <- function(train_augmX, z_train, y_train, test_augmX
     }
 
     rm(SRF)
+    gc(verbose = FALSE)
   }
 
   return(list(best_model = best_model, best_params = best_params, best_performance = best_performance, all_performances = all_performances))
@@ -163,6 +164,7 @@ optimize_and_evaluate_S_RF_2 <- function(train_augmX, z_train, y_train, test_aug
       }
 
       rm(SRF)
+      gc(verbose = FALSE)
     }
   }
 
@@ -250,6 +252,7 @@ optimize_and_evaluate_S_RF_3 <- function(train_augmX, z_train, y_train, test_aug
           }
 
           rm(SRF)
+          gc(verbose = FALSE)
         }
       } else {
         params <- test_params
@@ -289,6 +292,7 @@ optimize_and_evaluate_S_RF_3 <- function(train_augmX, z_train, y_train, test_aug
         }
 
         rm(SRF)
+        gc(verbose = FALSE)
       }
     }
 
@@ -403,7 +407,7 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
       test_est <- EstimateCate(TRF, test_augmX)
       PEHE_val <- PEHE(Test_CATT, test_est[z_test == 1])
 
-      if (PEHE_val < best_performance) {
+      if (!is.na(PEHE_val) && PEHE_val < best_performance) {
         best_performance <- PEHE_val
         best_mu0 <- mu0_params
         best_model <- TRF
@@ -414,6 +418,7 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
       }
 
       rm(TRF)
+      gc(verbose = FALSE)
     }
   }
 
@@ -459,7 +464,7 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
       test_est <- EstimateCate(TRF, test_augmX)
       PEHE_val <- PEHE(Test_CATT, test_est[z_test == 1])
 
-      if (PEHE_val < best_performance) {
+      if (!is.na(PEHE_val) && PEHE_val < best_performance) {
         best_performance <- PEHE_val
         best_mu1 <- mu1_params
         best_model <- TRF
@@ -470,6 +475,7 @@ optimize_and_evaluate_T_RF <- function(train_augmX, z_train, y_train,
       }
 
       rm(TRF)
+      gc(verbose = FALSE)
     }
   }
 
@@ -581,6 +587,7 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
       }
 
       rm(XRF)
+      gc(verbose = FALSE)
     }
   }
 
@@ -665,6 +672,7 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
       }
 
       rm(XRF)
+      gc(verbose = FALSE)
     }
   }
 
@@ -742,6 +750,7 @@ optimize_and_evaluate_X_RF <- function(train_augmX, z_train, y_train,
       }
 
       rm(XRF)
+      gc(verbose = FALSE)
     }
   }
 
@@ -806,6 +815,7 @@ prepare_train_data <- function(data,size_sample, hyperparams,seed = 123, train_r
 
   # Remove unused vars
   rm(data)
+  gc(verbose = FALSE)
 
   bruit_gaussien <- rnorm(size_sample, mean = 0, sd = sqrt(hyperparams$sigma_sq))
 
@@ -908,6 +918,7 @@ optimize_and_evaluate_rlasso <- function(x_train, w_train, y_train,
     }
 
     rm(model)
+    gc(verbose = FALSE)
   }
 
   return(list(
@@ -1016,6 +1027,7 @@ optimize_and_evaluate_X_logit_RF <- function(train_augmX, z_train, y_train,
       }
 
       rm(XRF)
+      gc(verbose = FALSE)
     }
   }
 
@@ -1078,6 +1090,7 @@ optimize_and_evaluate_X_logit_RF <- function(train_augmX, z_train, y_train,
       }
 
       rm(XRF)
+      gc(verbose = FALSE)
     }
   }
 

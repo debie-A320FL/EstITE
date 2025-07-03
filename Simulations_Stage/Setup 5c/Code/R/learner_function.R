@@ -109,6 +109,9 @@ DR_RF_learner_optimize <- function(
     pehe <- PEHE(val_CATT, DR_RF_learner_predict(fit, val_X))
     if(verbose) message(sprintf("  mu0 %s=%s -> PEHE=%.4f", param, val, pehe))
     if(pehe<best_pehe){ best_pehe<-pehe; best_mu0<-trial; if(verbose) message("   -> new best mu0, PEHE=",round(pehe,4)) }
+
+    rm(fit)
+    gc(verbose = FALSE)
   }
 
   # tune mu1
@@ -124,6 +127,9 @@ DR_RF_learner_optimize <- function(
     pehe <- PEHE(val_CATT, DR_RF_learner_predict(fit, val_X))
     if(verbose) message(sprintf("  mu1 %s=%s -> PEHE=%.4f", param, val, pehe))
     if(pehe<best_pehe){ best_pehe<-pehe; best_mu1<-trial; if(verbose) message("   -> new best mu1, PEHE=",round(pehe,4)) }
+
+    rm(fit)
+    gc(verbose = FALSE)
   }
 
   # tune cate
@@ -139,6 +145,9 @@ DR_RF_learner_optimize <- function(
     pehe <- PEHE(val_CATT, DR_RF_learner_predict(fit, val_X))
     if(verbose) message(sprintf("  cate %s=%s -> PEHE=%.4f", param, val, pehe))
     if(pehe<best_pehe){ best_pehe<-pehe; best_cat<-trial; if(verbose) message("   -> new best cate, PEHE=",round(pehe,4)) }
+
+    rm(fit)
+    gc(verbose = FALSE)
   }
 
   list(
@@ -246,6 +255,9 @@ RA_RF_learner_optimize <- function(
         best_pehe <- pehe; best_mu0 <- trial
         if (verbose) message("   -> new best mu0, PEHE=", round(pehe,4))
       }
+
+      rm(fit)
+      gc(verbose = FALSE)
     }
   }
 
@@ -269,6 +281,9 @@ RA_RF_learner_optimize <- function(
         best_pehe <- pehe; best_mu1 <- trial
         if (verbose) message("   -> new best mu1, PEHE=", round(pehe,4))
       }
+
+      rm(fit)
+      gc(verbose = FALSE)
     }
   }
 
@@ -292,6 +307,9 @@ RA_RF_learner_optimize <- function(
         best_pehe <- pehe; best_cat <- trial
         if (verbose) message("   -> new best cate, PEHE=", round(pehe,4))
       }
+
+      rm(fit)
+      gc(verbose = FALSE)
     }
   }
 
@@ -392,6 +410,9 @@ PW_RF_learner_optimize <- function(train_X, train_y, train_w,
         best_params <- trial
         if (verbose) message("   ✅ new best PEHE=",round(pehe,4))
       }
+
+      rm(fit)
+      gc(verbose = FALSE)
     }
   }
 
@@ -488,6 +509,8 @@ r_RF_learner_optimize <- function(
         best_pehe <- pehe; best_m <- trial
         if (verbose) message("   -> new best m-model, PEHE=", round(pehe,4))
       }
+      rm(fit)
+      gc(verbose = FALSE)
     }
   }
 
@@ -509,6 +532,8 @@ r_RF_learner_optimize <- function(
         best_pehe <- pehe; best_pi <- trial
         if (verbose) message("   -> new best pi-model, PEHE=", round(pehe,4))
       }
+      rm(fit)
+      gc(verbose = FALSE)
     }
   }
 
@@ -530,6 +555,8 @@ r_RF_learner_optimize <- function(
         best_pehe <- pehe; best_c <- trial
         if (verbose) message("   -> new best cate-model, PEHE=", round(pehe,4))
       }
+      rm(fit)
+      gc(verbose = FALSE)
     }
   }
 
