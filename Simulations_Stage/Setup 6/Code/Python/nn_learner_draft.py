@@ -35,10 +35,10 @@ def train_group(
     # choose loss fn
     if binary:
         loss_fn = nn.BCEWithLogitsLoss()
-        print("Using binary loss")
+    #    print("Using binary loss")
     else:
         loss_fn = nn.MSELoss()
-        print("Using continuous loss")
+    #    print("Using continuous loss")
 
     
 
@@ -188,10 +188,10 @@ def train_multitask_group(
     recent_states = deque(maxlen=patience)
     rollback_epoch = None
 
-    if binary:
-        print("Using binary loss")
-    else:
-        print("Using continuous loss")
+    #if binary:
+    #    print("Using binary loss")
+    #else:
+    #    print("Using continuous loss")
 
     for epoch in range(1, max_iter+1):
         # — TRAIN —
@@ -360,6 +360,93 @@ def train_m_learner(X, Z, y, **train_kwargs):
     print(f"M-learner: parameters from epoch {r}\n")
     return model, scaler, tr, val
 
+def train_ra_learner(X, Z, y, **train_kwargs):
+    """
+    RA Learner using neural networks for mu0 and mu1.
+    Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
+    """
+    # Fit T-learner models
+    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X, Z, y, **train_kwargs)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    m0, m1 = m0.to(device), m1.to(device)
+
+    # Compute nuisance estimates
+    X_t0 = torch.from_numpy(s0.transform(X.astype(np.float32))).to(device)
+    X_t1 = torch.from_numpy(s1.transform(X.astype(np.float32))).to(device)
+    with torch.no_grad():
+        mu0 = m0(X_t0).cpu().numpy().ravel()
+        mu1 = m1(X_t1).cpu().numpy().ravel()
+
+    # RA pseudo outcome
+    Z_flat = Z.ravel()
+    y_flat = y.ravel()
+    Y_tilde = Z_flat * (y_flat - mu0) + (1 - Z_flat) * (mu1 - y_flat)
+    Y_tilde = Y_tilde.reshape(-1, 1)
+
+    # Fit final tau model
+    tau_model, scaler_tau, tr, val, rollback = train_group(X, Y_tilde, **train_kwargs)
+    print(f"RA learner: parameters from epoch {rollback}\n")
+    return tau_model, scaler_tau, tr, val, rollback
+
+def train_dr_learner(X, Z, y, **train_kwargs):
+    """
+    DR Learner using neural networks and logistic regression.
+    Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
+    """
+    # 1. Propensity model
+    prop_model = LogisticRegression().fit(X, Z.ravel())
+    pi = prop_model.predict_proba(X)[:, 1]
+
+    # 2. Outcome models
+    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X, Z, y, **train_kwargs)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    m0, m1 = m0.to(device), m1.to(device)
+
+    X_np = X.astype(np.float32)
+    with torch.no_grad():
+        mu0 = m0(torch.from_numpy(s0.transform(X_np)).to(device)).cpu().numpy().ravel()
+        mu1 = m1(torch.from_numpy(s1.transform(X_np)).to(device)).cpu().numpy().ravel()
+
+    # DR pseudo outcome
+    Z_flat, y_flat = Z.ravel(), y.ravel()
+    numer = Z_flat / pi - (1 - Z_flat) / (1 - pi)
+    term1 = numer * y_flat
+    term2 = (1 - Z_flat / pi) * mu1 - (1 - (1 - Z_flat) / (1 - pi)) * mu0
+    Y_tilde = (term1 + term2).reshape(-1, 1)
+
+    # Final tau model
+    tau_model, scaler_tau, tr, val, rollback = train_group(X, Y_tilde, **train_kwargs)
+    print(f"DR learner: parameters from epoch {rollback}\n")
+    return tau_model, scaler_tau, tr, val, rollback
+
+def train_r_learner(X, Z, y, **train_kwargs):
+    """
+    R Learner using neural networks for m(x), logistic regression for pi(x).
+    Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
+    """
+    # 1. Fit mu model on full data
+    m_model, m_scaler, _, _, _ = train_group(X, y, **train_kwargs)
+    m_model = m_model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
+
+    # 2. Fit propensity model
+    prop_model = LogisticRegression().fit(X, Z.ravel())
+    pi = prop_model.predict_proba(X)[:, 1]
+
+    # 3. Compute residuals
+    X_scaled = m_scaler.transform(X.astype(np.float32))
+    with torch.no_grad():
+        mu_x = m_model(torch.from_numpy(X_scaled).to(m_model[0].weight.device)).cpu().numpy().ravel()
+
+    y_resid = y.ravel() - mu_x
+    w_resid = Z.ravel() - pi
+    X_aug = X.astype(np.float32)
+    y_r = (y_resid / (w_resid + 1e-8)).reshape(-1, 1)
+
+    # Fit tau model
+    tau_model, scaler_tau, tr, val, rollback = train_group(X_aug, y_r, **train_kwargs)
+    print(f"R learner: parameters from epoch {rollback}\n")
+    return tau_model, scaler_tau, tr, val, rollback
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -376,8 +463,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Running on device: {device}")
 
-    Nrow = int(1e4)
-    nb_sim = 13
+    Nrow = int(1e6)
+    nb_sim = 15
     for non_tr_percentage in [10]:
 
         # storage for per-run metrics
@@ -426,8 +513,7 @@ if __name__ == "__main__":
                 max_iter=50000, tol=1e-2,
                 hidden_dim=64, lr=0.01,
                 patience=100, patience_lr=25,
-                factor_lr=0.5, 
-                binary=False
+                factor_lr=0.5
             )
 
             save_learning_curve = True
@@ -469,6 +555,24 @@ if __name__ == "__main__":
             time_x = t1 - t0
             print(f"X-learner predict_time (without T part): {round(time_x,3)}")
 
+            # --- RA learner ---
+            t0 = time.time()
+            tau_ra, sc_ra, ra_tr, ra_val, rb_ra = train_ra_learner(X_train, Z_train, y_train, **params)
+            time_ra = time.time() - t0
+            print(f"RA-learner predict_time : {time_ra:.3f}")
+
+            # --- DR learner ---
+            t0 = time.time()
+            tau_dr, sc_dr, dr_tr, dr_val, rb_dr = train_dr_learner(X_train, Z_train, y_train, **params)
+            time_dr = time.time() - t0
+            print(f"DR-learner predict_time : {time_dr:.3f}")
+
+            # --- R learner ---
+            t0 = time.time()
+            tau_r, sc_r, r_tr, r_val, rb_r = train_r_learner(X_train, Z_train, y_train, **params)
+            time_r = time.time() - t0
+            print(f"R-learner predict_time : {time_r:.3f}\n")
+
             # prepare models on device & eval
             for mdl in (m_s, m0, m1, m_m, tau0_m, tau1_m):
                 mdl.to(device).eval()
@@ -503,34 +607,128 @@ if __name__ == "__main__":
                     tau1 = tau1_m(torch.from_numpy(sc_tau1.transform(x_np)).to(device)).item()
                 return 0.0, (1-p)*tau0 + p*tau1
 
+            def estimate_RA(x_np):
+                with torch.no_grad():
+                    return tau_ra(torch.from_numpy(sc_ra.transform(x_np.astype(np.float32))).to(device)).item()
 
-            # todo: make the pehe compute faster (parallelizing, etc)
-            # --- compute PEHE on test set ---
-            pehe = {}
-            for name, fn in [('S',estimate_S),('T',estimate_T),('M',estimate_M),('X',estimate_X)]:
-                errs = []
-                for i in range(len(X_test)):
-                    x_i = X_test[i:i+1]
-                    true_eff = (y1_te[i] - y0_te[i]).item()
-                    y0_hat, y1_hat = fn(x_i)
-                    errs.append(((y1_hat - y0_hat) - true_eff)**2)
-                pehe[name] = math.sqrt(np.mean(errs))
+            def estimate_DR(x_np):
+                with torch.no_grad():
+                    return tau_dr(torch.from_numpy(sc_dr.transform(x_np.astype(np.float32))).to(device)).item()
 
-            true_cate = (y1_te - y0_te).ravel()  # shape (n_test,)
+            def estimate_R(x_np):
+                with torch.no_grad():
+                    return tau_r(torch.from_numpy(sc_r.transform(x_np.astype(np.float32))).to(device)).item()
 
-            mean_cate = np.mean(true_cate)
-            pehe['Mean-CATE'] = np.sqrt(np.mean((mean_cate - true_cate)**2))
 
-            pehe['Zero-CATE'] = np.sqrt(np.mean((0.0 - true_cate)**2))
+            if 1:
+                # --- compute PEHE for all learners (vectorized) ---
+                t0_pehe = time.time()
+                true_eff = (y1_te - y0_te).ravel()         # shape (n_test,)
 
-            print("PEHE results:")
-            for name, val in pehe.items():
-                print(f"  {name}-learner: {val:.6e}")
+                # 1) S-learner
+                X0_s = np.hstack([X_test, np.zeros((len(X_test),1),dtype=np.float32)])
+                X1_s = np.hstack([X_test, np.ones ((len(X_test),1),dtype=np.float32)])
+                with torch.no_grad():
+                    t0_s = m_s(torch.from_numpy(sc_s.transform(X0_s)).to(device)).cpu().numpy().ravel()
+                    t1_s = m_s(torch.from_numpy(sc_s.transform(X1_s)).to(device)).cpu().numpy().ravel()
+                pred_S = t1_s - t0_s
+
+                # 2) T-learner
+                with torch.no_grad():
+                    t0_t = m0(torch.from_numpy(sc0.transform(X_test.astype(np.float32))).to(device)).cpu().numpy().ravel()
+                    t1_t = m1(torch.from_numpy(sc1.transform(X_test.astype(np.float32))).to(device)).cpu().numpy().ravel()
+                pred_T = t1_t - t0_t
+
+                # 3) M-learner
+                with torch.no_grad():
+                    out_m = m_m(torch.from_numpy(sc_m.transform(X_test.astype(np.float32))).to(device))
+                    t0_m_, t1_m_ = out_m[:,0].cpu().numpy(), out_m[:,1].cpu().numpy()
+                pred_M = t1_m_ - t0_m_
+
+                # 4) X-learner
+                p = prop_model.predict_proba(X_test.astype(np.float32))[:,1]
+                with torch.no_grad():
+                    tau0 = tau0_m(torch.from_numpy(sc_tau0.transform(X_test.astype(np.float32))).to(device)).cpu().numpy().ravel()
+                    tau1 = tau1_m(torch.from_numpy(sc_tau1.transform(X_test.astype(np.float32))).to(device)).cpu().numpy().ravel()
+                pred_X = (1-p)*tau0 + p*tau1
+
+                # 5) RA, DR, R learners
+                with torch.no_grad():
+                    pred_RA = tau_ra(torch.from_numpy(sc_ra.transform(X_test.astype(np.float32))).to(device)).cpu().numpy().ravel()
+                    pred_DR = tau_dr(torch.from_numpy(sc_dr.transform(X_test.astype(np.float32))).to(device)).cpu().numpy().ravel()
+                    pred_R  = tau_r(torch.from_numpy(sc_r .transform(X_test.astype(np.float32))).to(device)).cpu().numpy().ravel()
+
+                # helper
+                def compute_pehe(pred):
+                    return math.sqrt(np.mean((pred - true_eff)**2))
+
+                pehe = {
+                    'S':  compute_pehe(pred_S),
+                    'T':  compute_pehe(pred_T),
+                    'M':  compute_pehe(pred_M),
+                    'X':  compute_pehe(pred_X),
+                    'RA': compute_pehe(pred_RA),
+                    'DR': compute_pehe(pred_DR),
+                    'R':  compute_pehe(pred_R),
+                    'ATE': compute_pehe(np.full_like(true_eff, true_eff.mean())),
+                    'Zero': compute_pehe(np.zeros_like(true_eff)),
+                }
+                
+                print("PEHE results:")
+                for name, val in pehe.items():
+                    print(f"  {name}-learner: {val:.3e}")
+
+                t1_pehe = time.time()
+                time_t = t1_pehe - t0_pehe
+                print(f"PEHE (par) calculation : {round(time_t,3)}")
+
+            # To slow (old computation method)
+            if 0:
+                t0_pehe = time.time()
+                # --- compute PEHE on test set ---
+                pehe = {}
+                for name, fn in [
+                    ('S', estimate_S),
+                    ('T', estimate_T),
+                    ('M', estimate_M),
+                    ('X', estimate_X),
+                    ('RA', estimate_RA),
+                    ('DR', estimate_DR),
+                    ('R', estimate_R)
+                ]:
+                    errs = []
+                    for i in range(len(X_test)):
+                        true_eff = (y1_te[i] - y0_te[i]).item()
+                        if name in ['S', 'T', 'M', 'X']:
+                            y0_hat, y1_hat = fn(X_test[i:i+1])
+                            pred_eff = y1_hat - y0_hat
+                        else:
+                            pred_eff = fn(X_test[i:i+1])
+                        errs.append((pred_eff - true_eff) ** 2)
+                    pehe[name] = math.sqrt(np.mean(errs))
+
+                true_cate = (y1_te - y0_te).ravel()  # shape (n_test,)
+
+                mean_cate = np.mean(true_cate)
+                pehe['Mean-CATE'] = np.sqrt(np.mean((mean_cate - true_cate)**2))
+
+                pehe['Zero-CATE'] = np.sqrt(np.mean((0.0 - true_cate)**2))
+
+                print("PEHE results:")
+                for name, val in pehe.items():
+                    print(f"  {name}-learner: {val:.6e}")
+
+                t1_pehe = time.time()
+                time_t = t1_pehe - t0_pehe
+                print(f"PEHE (non-par) calculation : {round(time_t,3)}")
 
             # --- record metrics ---
             pehe_records.append({'sim': sim, **pehe})
-            time_records.append({'sim': sim, 'S': time_s, 'T': time_t, 'M': time_m, 'X': time_x})
-
+            time_records.append({
+                'sim': sim,
+                'S': time_s, 'T': time_t, 'M': time_m, 'X': time_x,
+                'RA': time_ra, 'DR': time_dr, 'R': time_r
+            })
             # --- save learning curves ---
             if save_learning_curve and sim < 5:
                 fname = f'learning_curves_{sim}_STXM_tr_per_{non_tr_percentage}_size_{Nrow}.pdf'
@@ -542,6 +740,9 @@ if __name__ == "__main__":
                         ('M-learner', m_tr, m_val),
                         ('X-learner (Tau 0)', x0_tr, x0_val),
                         ('X-learner (Tau 1)', x1_tr, x1_val),
+                        ('RA-learner', ra_tr, ra_val),
+                        ('DR-learner', dr_tr, dr_val),
+                        ('R-learner', r_tr, r_val),
                     ]:
                         plt.figure()
                         plt.plot(tr, label='Train Loss')
