@@ -30,6 +30,7 @@ def train_group(
     Generic training + rollback patience, with optional GPU support.
     Returns: model, scaler, train_losses, val_losses, rollback_epoch
     """
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # choose loss fn
@@ -142,6 +143,13 @@ def train_multitask_group(
     If binary=True, uses BCEWithLogitsLoss on each head; else uses MSE.
     Returns: model, scaler, train_losses, val_losses, rollback_epoch
     """
+
+    # Convert DataFrame/Series to NumPy arrays if needed
+    #if hasattr(X, "values"):
+    #    X = X.values.astype(np.float32)
+    #if hasattr(y, "values"):
+    #    y = y.values.astype(np.float32)
+        
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # split + scale
@@ -268,8 +276,22 @@ def train_s_learner(X, Z, y, **train_kwargs):
 
 
 def train_t_learner(X, Z, y, **train_kwargs):
-    X0, y0 = X[Z[:,0]==0], y[Z[:,0]==0]
-    X1, y1 = X[Z[:,0]==1], y[Z[:,0]==1]
+    # 2) Sanity‐check
+    Z = np.asarray(Z, dtype=np.float32).reshape(-1)   # (n,)
+    #print(f"[T‑learner] Full data shapes → X: {X.shape}, Z: {Z.shape}, y: {y.shape}")
+
+    # 3) Split into Z=0 (control) and Z=1 (treated)
+    idx0 = (Z == 0)
+    idx1 = (Z == 1)
+
+    X0, y0 = X[idx0], y[idx0]
+    X1, y1 = X[idx1], y[idx1]
+
+    #print(f"[T‑learner] Control group: X0 {X0.shape}, y0 {y0.shape}")
+    #print(f"[T‑learner] Treated group: X1 {X1.shape}, y1 {y1.shape}\n")
+
+    #X0, y0 = X[Z[:,0]==0], y[Z[:,0]==0]
+    #X1, y1 = X[Z[:,0]==1], y[Z[:,0]==1]
     m0, s0, t0_tr, t0_val, r0 = train_group(X0, y0, **train_kwargs)
     print(f"T-learner (Z=0): parameters from epoch {r0}")
     m1, s1, t1_tr, t1_val, r1 = train_group(X1, y1, **train_kwargs)
@@ -447,6 +469,48 @@ def train_r_learner(X, Z, y, **train_kwargs):
     print(f"R learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
+# define estimators
+def estimate_S(x_np):
+    x0 = np.concatenate([x_np, [[0.]]], axis=1).astype(np.float32)
+    x1 = np.concatenate([x_np, [[1.]]], axis=1).astype(np.float32)
+    with torch.no_grad():
+        t0 = m_s(torch.from_numpy(sc_s.transform(x0)).to(device)).item()
+        t1 = m_s(torch.from_numpy(sc_s.transform(x1)).to(device)).item()
+    return t0, t1
+
+def estimate_T(x_np):
+    x_np = x_np.astype(np.float32)
+    with torch.no_grad():
+        t0 = m0(torch.from_numpy(sc0.transform(x_np)).to(device)).item()
+        t1 = m1(torch.from_numpy(sc1.transform(x_np)).to(device)).item()
+    return t0, t1
+
+def estimate_M(x_np):
+    x_np = x_np.astype(np.float32)
+    with torch.no_grad():
+        out = m_m(torch.from_numpy(sc_m.transform(x_np)).to(device)).cpu().numpy().ravel()
+    return out[0], out[1]
+
+def estimate_X(x_np):
+    x_np = x_np.astype(np.float32).reshape(1, -1)
+    p = prop_model.predict_proba(x_np)[:,1].item()
+    with torch.no_grad():
+        tau0 = tau0_m(torch.from_numpy(sc_tau0.transform(x_np)).to(device)).item()
+        tau1 = tau1_m(torch.from_numpy(sc_tau1.transform(x_np)).to(device)).item()
+    return 0.0, (1-p)*tau0 + p*tau1
+
+def estimate_RA(x_np):
+    with torch.no_grad():
+        return tau_ra(torch.from_numpy(sc_ra.transform(x_np.astype(np.float32))).to(device)).item()
+
+def estimate_DR(x_np):
+    with torch.no_grad():
+        return tau_dr(torch.from_numpy(sc_dr.transform(x_np.astype(np.float32))).to(device)).item()
+
+def estimate_R(x_np):
+    with torch.no_grad():
+        return tau_r(torch.from_numpy(sc_r.transform(x_np.astype(np.float32))).to(device)).item()
+
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
@@ -463,8 +527,8 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Running on device: {device}")
 
-    Nrow = int(1e6)
-    nb_sim = 15
+    Nrow = int(1e4)
+    nb_sim = 1
     for non_tr_percentage in [10]:
 
         # storage for per-run metrics
@@ -484,7 +548,7 @@ if __name__ == "__main__":
             torch.backends.cudnn.benchmark = False
 
             # --- generate data ---
-            n_samples, n_features = Nrow, 1
+            n_samples, n_features = Nrow, 10
             X = np.random.rand(n_samples, n_features).astype(np.float32)
             Z = np.random.binomial(1, non_tr_percentage/100, size=(n_samples,1)).astype(np.float32)
             # y0 = (2*X + X*X).sum(axis=1,keepdims=True)
@@ -493,8 +557,8 @@ if __name__ == "__main__":
             #y1 = (2*X +  1.5 *X*X - 0.5 * np.sqrt(X)).sum(axis=1,keepdims=True)
 
             # define your raw scores for control/treatment
-            score0 = (0.5 + 10*X + 50 * X**2).sum(axis=1)          # shape (n,)
-            score1 = (- 0.5 * X - 20 *X**2).sum(axis=1)
+            score0 = (- 5 + 8 * X +  20 * X**2).sum(axis=1)          # shape (n,)
+            score1 = (5 - 8 * X - 20 *X**2).sum(axis=1)
 
             # map them to probabilities via sigmoid
             p0 = expit(score0)                        # in (0,1)
