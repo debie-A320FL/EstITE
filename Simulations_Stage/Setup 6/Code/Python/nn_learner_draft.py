@@ -387,26 +387,28 @@ def train_ra_learner(X, Z, y, **train_kwargs):
     RA Learner using neural networks for mu0 and mu1.
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
     """
+    X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
+
     # Fit T-learner models
-    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X, Z, y, **train_kwargs)
+    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X1, Z1, y1, **train_kwargs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     m0, m1 = m0.to(device), m1.to(device)
 
     # Compute nuisance estimates
-    X_t0 = torch.from_numpy(s0.transform(X.astype(np.float32))).to(device)
-    X_t1 = torch.from_numpy(s1.transform(X.astype(np.float32))).to(device)
+    X_t0 = torch.from_numpy(s0.transform(X2.astype(np.float32))).to(device)
+    X_t1 = torch.from_numpy(s1.transform(X2.astype(np.float32))).to(device)
     with torch.no_grad():
         mu0 = m0(X_t0).cpu().numpy().ravel()
         mu1 = m1(X_t1).cpu().numpy().ravel()
 
     # RA pseudo outcome
-    Z_flat = Z.ravel()
-    y_flat = y.ravel()
+    Z_flat = Z2.ravel()
+    y_flat = y2.ravel()
     Y_tilde = Z_flat * (y_flat - mu0) + (1 - Z_flat) * (mu1 - y_flat)
     Y_tilde = Y_tilde.reshape(-1, 1)
 
     # Fit final tau model
-    tau_model, scaler_tau, tr, val, rollback = train_group(X, Y_tilde, **train_kwargs)
+    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, **train_kwargs)
     print(f"RA learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
@@ -415,29 +417,33 @@ def train_dr_learner(X, Z, y, **train_kwargs):
     DR Learner using neural networks and logistic regression.
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
     """
+    X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
+
     # 1. Propensity model
-    prop_model = LogisticRegression().fit(X, Z.ravel())
-    pi = prop_model.predict_proba(X)[:, 1]
+    prop_model = LogisticRegression().fit(X1, Z1.ravel())
+    pi = prop_model.predict_proba(X2)[:, 1]
 
     # 2. Outcome models
-    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X, Z, y, **train_kwargs)
+    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X1, Z1, y1, **train_kwargs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     m0, m1 = m0.to(device), m1.to(device)
 
-    X_np = X.astype(np.float32)
+    X_np = X2.astype(np.float32)
     with torch.no_grad():
         mu0 = m0(torch.from_numpy(s0.transform(X_np)).to(device)).cpu().numpy().ravel()
         mu1 = m1(torch.from_numpy(s1.transform(X_np)).to(device)).cpu().numpy().ravel()
 
     # DR pseudo outcome
-    Z_flat, y_flat = Z.ravel(), y.ravel()
+    Z_flat, y_flat = Z2.ravel(), y2.ravel()
+    epsilon = 1e-6
+    pi = np.clip(pi, epsilon, 1 - epsilon)
     numer = Z_flat / pi - (1 - Z_flat) / (1 - pi)
     term1 = numer * y_flat
     term2 = (1 - Z_flat / pi) * mu1 - (1 - (1 - Z_flat) / (1 - pi)) * mu0
     Y_tilde = (term1 + term2).reshape(-1, 1)
 
     # Final tau model
-    tau_model, scaler_tau, tr, val, rollback = train_group(X, Y_tilde, **train_kwargs)
+    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, **train_kwargs)
     print(f"DR learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
@@ -446,22 +452,25 @@ def train_r_learner(X, Z, y, **train_kwargs):
     R Learner using neural networks for m(x), logistic regression for pi(x).
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
     """
+
+    X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
+
     # 1. Fit mu model on full data
-    m_model, m_scaler, _, _, _ = train_group(X, y, **train_kwargs)
+    m_model, m_scaler, _, _, _ = train_group(X1, y1, **train_kwargs)
     m_model = m_model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
     # 2. Fit propensity model
-    prop_model = LogisticRegression().fit(X, Z.ravel())
-    pi = prop_model.predict_proba(X)[:, 1]
+    prop_model = LogisticRegression().fit(X1, Z1.ravel())
+    pi = prop_model.predict_proba(X2)[:, 1]
 
     # 3. Compute residuals
-    X_scaled = m_scaler.transform(X.astype(np.float32))
+    X_scaled = m_scaler.transform(X2.astype(np.float32))
     with torch.no_grad():
         mu_x = m_model(torch.from_numpy(X_scaled).to(m_model[0].weight.device)).cpu().numpy().ravel()
 
-    y_resid = y.ravel() - mu_x
-    w_resid = Z.ravel() - pi
-    X_aug = X.astype(np.float32)
+    y_resid = y2.ravel() - mu_x
+    w_resid = Z2.ravel() - pi
+    X_aug = X2.astype(np.float32)
     y_r = (y_resid / (w_resid + 1e-8)).reshape(-1, 1)
 
     # Fit tau model

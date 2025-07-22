@@ -179,56 +179,255 @@ def prepare_train_data(size_sample, hyperparams, seed=123, train_ratio=0.7,
     }
 
 
+def prepare_train_data_null_cate_indep_treatment(size_sample, x_dim, seed=123,
+                                                 train_ratio=0.7, treatment_prob=0.35,
+                                                 binary=False):
+    np.random.seed(seed)
+    random.seed(seed)
+
+    # Generate independent Gaussian features
+    X = np.random.normal(0, 1, size=(size_sample, x_dim))
+    feature_names = [f"x{i}" for i in range(x_dim)]
+    myX = pd.DataFrame(X, columns=feature_names)
+
+    # Treatment assignment: independent Bernoulli
+    myZ = np.random.binomial(1, treatment_prob, size=size_sample)
+
+    # Outcome generation: only depends on X
+    gamma = np.random.uniform(-1, 1, x_dim)
+    mu = myX.values @ gamma
+    prob_y = 1 / (1 + np.exp(-mu))  # probability of positive outcome
+
+    myY = prob_y
+    if binary:
+        myY = np.random.binomial(1, prob_y)
+
+    # Train-test split
+    N = size_sample
+    mysplit = [1] * int(train_ratio * N) + [2] * (N - int(train_ratio * N))
+    random.shuffle(mysplit)
+    smp_split = np.array(mysplit)
+
+    x_train = myX[smp_split == 1]
+    x_test = myX[smp_split == 2]
+    z_train = myZ[smp_split == 1]
+    z_test = myZ[smp_split == 2]
+    y_train = myY[smp_split == 1]
+    y_test = myY[smp_split == 2]
+
+    # True ITEs are zero
+    ITE = np.zeros(size_sample)
+    Train_ITE = ITE[smp_split == 1]
+    Test_ITE = ITE[smp_split == 2]
+
+    Test_CATT = Test_ITE[z_test == 1]
+    Test_CATC = Test_ITE[z_test == 0]
+
+    return {
+        "x_train": x_train, "z_train": z_train, "y_train": y_train,
+        "x_test": x_test, "z_test": z_test, "y_test": y_test,
+        "Test_CATT": Test_CATT, "Test_CATC": Test_CATC, "Test_ITE": Test_ITE,
+    }
+
+def prepare_train_data_scenario1(
+    size_sample: int,
+    x_dim: int,
+    k_mu: int = 5,              # Number of features used in outcome model μ₀
+    k_conf: int = 5,            # Additional features influencing treatment (confounders)
+    non_treated_frac: float = 0.1,  # Desired fraction of untreated individuals
+    seed: int = 123,
+    train_ratio: float = 0.7,
+    noise_std: float = 1.0,
+    binary: bool = False
+) -> dict:
+    np.random.seed(seed)
+    random.seed(seed)
+
+    # 1. Generate Gaussian features
+    X = np.random.normal(0, 1, size=(size_sample, x_dim))
+    feature_names = [f"x{j}" for j in range(x_dim)]
+    dfX = pd.DataFrame(X, columns=feature_names)
+
+    # 2. Randomly select disjoint index sets
+    all_indices = list(range(x_dim))
+    random.shuffle(all_indices)
+    S_mu = all_indices[:k_mu]
+    S_conf = all_indices[k_mu:k_mu + k_conf]
+    S_pi = S_mu + S_conf  # Features influencing treatment assignment
+
+    # 3. Sample coefficients
+    gamma0 = 0.0
+    gamma = np.random.normal(0, 1, x_dim)  # for μ₀
+    alpha0 = 0.0
+    alpha = np.random.normal(0, 1, x_dim)  # for π(x)
+
+    # 4. Compute μ₀(x)
+    mu0 = gamma0 + X[:, S_mu] @ gamma[S_mu]
+
+    # 5. τ(x) = 0 → null CATE
+    tau = np.zeros(size_sample)
+
+    # 6. Compute π(x) = logistic(α₀ + αᵗx)
+    pi_logits = alpha0 + X[:, S_pi] @ alpha[S_pi]
+    pi = 1 / (1 + np.exp(-pi_logits))
+
+    # 7. Assign treatment to match desired untreated proportion
+    n_control = int(non_treated_frac * size_sample)
+    n_treated = size_sample - n_control
+
+    # Sort by π(x) descending and assign treatment
+    sorted_indices = np.argsort(-pi)
+    Z = np.zeros(size_sample, dtype=int)
+    Z[sorted_indices[:n_treated]] = 1  # Top individuals more likely to be treated
+
+    # 8. Generate outcome Y = μ₀(x) + ε
+    Y_cont = mu0 + np.random.normal(0, noise_std, size=size_sample)
+
+    if binary:
+        pY = 1 / (1 + np.exp(-Y_cont))
+        Y = np.random.binomial(1, pY)
+    else:
+        Y = Y_cont
+
+    # 9. Train-test split
+    indices = np.arange(size_sample)
+    np.random.shuffle(indices)
+    train_size = int(train_ratio * size_sample)
+    train_idx, test_idx = indices[:train_size], indices[train_size:]
+
+    def split(arr):
+        return arr[train_idx], arr[test_idx]
+
+    x_train = dfX.iloc[train_idx]
+    x_test = dfX.iloc[test_idx]
+    z_train, z_test = split(Z)
+    y_train, y_test = split(Y)
+
+    ITE_test = np.zeros(len(test_idx))
+    Test_CATT = ITE_test[z_test == 1]
+    Test_CATC = ITE_test[z_test == 0]
+
+    return {
+        "x_train": x_train, "z_train": z_train, "y_train": y_train,
+        "x_test": x_test,   "z_test": z_test,   "y_test": y_test,
+        "Test_ITE": ITE_test, "Test_CATT": Test_CATT, "Test_CATC": Test_CATC,
+    }
+
+def prepare_train_data_scenario2(
+    size_sample: int,
+    x_dim: int,
+    k_mu: int = 5,            # Number of features used in outcome model μ₀
+    k_conf: int = 5,          # Additional features used in π(x)
+    k_tau: int = 5,           # Features used in τ(x)
+    seed: int = 123,
+    train_ratio: float = 0.7,
+    noise_std: float = 1.0,
+    binary: bool = False,
+    non_treated_frac: float = None  # e.g., 0.1 for forcing ~10% untreated
+) -> dict:
+    np.random.seed(seed)
+    random.seed(seed)
+
+    # 1. Generate Gaussian features
+    X = np.random.normal(0, 1, size=(size_sample, x_dim))
+    feature_names = [f"x{j}" for j in range(x_dim)]
+    dfX = pd.DataFrame(X, columns=feature_names)
+
+    # 2. Randomly select disjoint index sets
+    all_indices = list(range(x_dim))
+    random.shuffle(all_indices)
+    S_mu = all_indices[:k_mu]
+    S_conf = all_indices[k_mu:k_mu + k_conf]
+    S_tau = all_indices[k_mu + k_conf:k_mu + k_conf + k_tau]
+    S_pi = S_mu + S_conf  # features influencing treatment assignment
+
+    # 3. Sample coefficients
+    gamma0 = 0.0
+    gamma = np.random.normal(0, 1, x_dim)  # for μ₀(x)
+
+    alpha0 = 0.0
+    alpha = np.random.normal(0, 1, x_dim)  # for π(x)
+
+    delta0 = 0.0
+    delta = np.random.normal(0, 1, x_dim)  # for τ(x)
+
+    # 4. Compute μ₀(x)
+    mu0 = gamma0 + X[:, S_mu] @ gamma[S_mu]
+
+    # 5. Compute τ(x)
+    tau = delta0 + X[:, S_tau] @ delta[S_tau]
+
+    # 6. Compute π(x)
+    pi_logits = alpha0 + X[:, S_pi] @ alpha[S_pi]
+    pi = 1 / (1 + np.exp(-pi_logits))
+
+    # 7. Sample treatment Z ~ Bern(pi)
+    Z = np.random.binomial(1, pi)
+
+    # Optional: force a fraction of individuals to be untreated
+    if non_treated_frac is not None:
+        n_force_control = int(non_treated_frac * size_sample)
+        control_indices = np.random.choice(size_sample, n_force_control, replace=False)
+        Z[control_indices] = 0
+
+    # 8. Generate potential outcomes
+    Y0 = mu0 + np.random.normal(0, noise_std, size=size_sample)
+    Y1 = mu0 + tau + np.random.normal(0, noise_std, size=size_sample)
+
+    # Observed outcome
+    Y_cont = Y0 * (1 - Z) + Y1 * Z
+
+    # Optional binarization
+    if binary:
+        pY = 1 / (1 + np.exp(-Y_cont))
+        Y = np.random.binomial(1, pY)
+    else:
+        Y = Y_cont
+
+    # 9. Train-test split
+    N = size_sample
+    indices = np.arange(N)
+    np.random.shuffle(indices)
+    train_size = int(train_ratio * N)
+    train_idx, test_idx = indices[:train_size], indices[train_size:]
+
+    def split(arr):
+        return arr[train_idx], arr[test_idx]
+
+    x_train = dfX.iloc[train_idx]
+    x_test = dfX.iloc[test_idx]
+    z_train, z_test = split(Z)
+    y_train, y_test = split(Y)
+    ITE = tau  # τ(x) is the true ITE
+
+    ITE_train, ITE_test = split(ITE)
+    Test_CATT = ITE_test[z_test == 1]
+    Test_CATC = ITE_test[z_test == 0]
+
+    return {
+        "x_train": x_train,   "z_train": z_train,   "y_train": y_train,
+        "x_test": x_test,     "z_test": z_test,     "y_test": y_test,
+        "Test_ITE": ITE_test, "Test_CATT": Test_CATT, "Test_CATC": Test_CATC,
+    }
+
 if __name__ == "__main__":
-    import pandas as pd
+    output = prepare_train_data_null_cate_indep_treatment(size_sample = 10000, x_dim = 5, seed=123,
+                                                 train_ratio=0.7, treatment_prob=0.1,
+                                                 binary=True)
 
-    import os
+    def summarize_output(data_dict):
+        print("=== x_train ===")
+        print(data_dict["x_train"].describe())
+        print("\n=== x_test ===")
+        print(data_dict["x_test"].describe())
 
-    print("hello")
-    os.chdir("/home/onyxia/work/EstITE/Simulations_Stage/Setup 6")
-    hyperparams_df = pd.read_csv("./../Setup 1a/Data/hyperparams.csv")
-    column_names = hyperparams_df.columns.tolist()
+        print("\n=== Treatment (z_train) distribution ===")
+        print(pd.Series(data_dict["z_train"]).value_counts(normalize=True))
 
-    # Convert first row to dict
-    hyperparams_dict = hyperparams_df.iloc[0].to_dict()
-    print(column_names)
-    hyperparams_dict["beta_0"] = find_optimal_beta_0(5/100)
-    data = generate_data(n=1000,  **hyperparams_dict)
-    mean_Y = data["Y"].mean()
-    print(f"Mean of Y: {mean_Y}")
+        print("\n=== Outcome (y_train) summary ===")
+        print(pd.Series(data_dict["y_train"]).describe())
 
-    mean_Z = data["treatment"].mean()
-    print(f"Mean of Z: {mean_Z}")
+        print("\n=== Test ITE Summary ===")
+        print(pd.Series(data_dict["Test_ITE"]).describe())                                             
 
-    if 0:
-
-        os.chdir("/home/onyxia/work/EstITE/Simulations_Stage/Setup 5c")
-
-        # Load data
-        hyperparams_df = pd.read_csv("./../Setup 1a/Data/hyperparams.csv")
-        data_train_test = pd.read_csv("./../Setup 1a/Data/simulated_1M_data.csv")
-
-        data_validation = pd.read_csv("./../Setup 1a/Data/simulated_10K_data_validation.csv")
-        size_sample_val = data_validation.shape[0]
-
-        # Convert hyperparams to dictionary (if it's a single row)
-        hyperparams = hyperparams_df.iloc[0].to_dict()
-        treatment_percentile = 10
-        binary = True
-
-        # Prepare validation data
-        res_val = prepare_train_data(
-            data=data_validation,
-            hyperparams=hyperparams,
-            size_sample=size_sample_val,
-            train_ratio=0,
-            treatment_percentile=treatment_percentile,
-            verbose=True,
-            binary=binary
-        )
-
-        # Unpack results
-        val_augmX = res_val['test_augmX']
-        z_val     = res_val['z_test']
-        y_val     = res_val['y_test']
-        val_CATT  = res_val['Test_CATT']
+    summarize_output(output)              
