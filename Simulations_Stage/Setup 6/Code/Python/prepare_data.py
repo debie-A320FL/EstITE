@@ -362,13 +362,14 @@ def prepare_train_data_scenario2(
     pi = 1 / (1 + np.exp(-pi_logits))
 
     # 7. Sample treatment Z ~ Bern(pi)
-    Z = np.random.binomial(1, pi)
-
-    # Optional: force a fraction of individuals to be untreated
     if non_treated_frac is not None:
-        n_force_control = int(non_treated_frac * size_sample)
-        control_indices = np.random.choice(size_sample, n_force_control, replace=False)
-        Z[control_indices] = 0
+        n_control = int(non_treated_frac * size_sample)
+        n_treated = size_sample - n_control
+        sorted_indices = np.argsort(-pi)  # sort by decreasing pi(x)
+        Z = np.zeros(size_sample, dtype=int)
+        Z[sorted_indices[:n_treated]] = 1
+    else:
+        Z = np.random.binomial(1, pi)
 
     # 8. Generate potential outcomes
     Y0 = mu0 + np.random.normal(0, noise_std, size=size_sample)
@@ -409,6 +410,100 @@ def prepare_train_data_scenario2(
         "x_test": x_test,     "z_test": z_test,     "y_test": y_test,
         "Test_ITE": ITE_test, "Test_CATT": Test_CATT, "Test_CATC": Test_CATC,
     }
+
+def prepare_train_data_scenario3(
+    size_sample: int,
+    x_dim: int,
+    k_mu: int = 5,             # Number of features for μ₀(x)
+    k_tau: int = 5,            # Number of features for μ₁(x)
+    k_pi: int = 5,             # Features affecting π(x)
+    seed: int = 123,
+    train_ratio: float = 0.7,
+    noise_std: float = 1.0,
+    binary: bool = False,
+    non_treated_frac: float = None  # e.g., 0.1 for forcing 10% untreated
+) -> dict:
+    np.random.seed(seed)
+    random.seed(seed)
+
+    # 1. Generate Gaussian covariates
+    X = np.random.normal(0, 1, size=(size_sample, x_dim))
+    feature_names = [f"x{j}" for j in range(x_dim)]
+    dfX = pd.DataFrame(X, columns=feature_names)
+
+    # 2. Select disjoint subsets of features
+    all_indices = list(range(x_dim))
+    random.shuffle(all_indices)
+    S_0 = all_indices[:k_mu]
+    S_1 = all_indices[k_mu:k_mu + k_tau]
+    S_pi = all_indices[k_mu + k_tau:k_mu + k_tau + k_pi]
+
+    # 3. Sample coefficients
+    gamma0 = 0.0
+    gamma = np.random.normal(0, 1, x_dim)  # for μ₀(x)
+    beta0 = 0.0
+    beta = np.random.normal(0, 1, x_dim)   # for μ₁(x)
+    alpha0 = 0.0
+    alpha = np.random.normal(0, 1, x_dim)  # for π(x)
+
+    # 4. Compute μ₀(x) and μ₁(x)
+    mu0 = gamma0 + X[:, S_0] @ gamma[S_0]
+    mu1 = beta0 + X[:, S_1] @ beta[S_1]
+
+    # True ITE
+    tau = mu1 - mu0
+
+    # 5. Compute π(x) = sigmoid(α₀ + αᵗx)
+    pi_logits = alpha0 + X[:, S_pi] @ alpha[S_pi]
+    pi = 1 / (1 + np.exp(-pi_logits))
+
+    # 6. Treatment assignment
+    if non_treated_frac is not None:
+        n_control = int(non_treated_frac * size_sample)
+        n_treated = size_sample - n_control
+        sorted_indices = np.argsort(-pi)
+        Z = np.zeros(size_sample, dtype=int)
+        Z[sorted_indices[:n_treated]] = 1
+    else:
+        Z = np.random.binomial(1, pi)
+
+    # 7. Generate potential outcomes
+    Y0 = mu0 + np.random.normal(0, noise_std, size=size_sample)
+    Y1 = mu1 + np.random.normal(0, noise_std, size=size_sample)
+
+    Y_cont = Y0 * (1 - Z) + Y1 * Z
+
+    # 8. Optional binarization
+    if binary:
+        pY = 1 / (1 + np.exp(-Y_cont))
+        Y = np.random.binomial(1, pY)
+    else:
+        Y = Y_cont
+
+    # 9. Train-test split
+    indices = np.arange(size_sample)
+    np.random.shuffle(indices)
+    train_size = int(train_ratio * size_sample)
+    train_idx, test_idx = indices[:train_size], indices[train_size:]
+
+    def split(arr):
+        return arr[train_idx], arr[test_idx]
+
+    x_train = dfX.iloc[train_idx]
+    x_test = dfX.iloc[test_idx]
+    z_train, z_test = split(Z)
+    y_train, y_test = split(Y)
+    ITE_train, ITE_test = split(tau)
+
+    Test_CATT = ITE_test[z_test == 1]
+    Test_CATC = ITE_test[z_test == 0]
+
+    return {
+        "x_train": x_train,   "z_train": z_train,   "y_train": y_train,
+        "x_test": x_test,     "z_test": z_test,     "y_test": y_test,
+        "Test_ITE": ITE_test, "Test_CATT": Test_CATT, "Test_CATC": Test_CATC,
+    }
+
 
 if __name__ == "__main__":
     output = prepare_train_data_null_cate_indep_treatment(size_sample = 10000, x_dim = 5, seed=123,

@@ -110,7 +110,32 @@ for x_dim in [25,50,100,300,500,1000]:
                             noise_std  = 1.0,
                             binary = True
                         )
-
+            elif scen == 2:
+                res_train_test = prepare_train_data_scenario2(
+                        size_sample = size_sample,
+                        x_dim = x_dim,
+                        k_mu = x_dim //4,            # Number of features used in outcome model μ₀
+                        k_conf = x_dim //4,          # Additional features used in π(x)
+                        k_tau = x_dim //4,           # Features used in τ(x)
+                        seed = sim,
+                        train_ratio = 0.7,
+                        noise_std = 1.0,
+                        binary = True,
+                        non_treated_frac = 0.1  # e.g., 0.1 for forcing ~10% untreated
+                    )
+            elif scen == 3:
+                res_train_test = prepare_train_data_scenario3(
+                                size_sample = size_sample,
+                                x_dim = x_dim,
+                                k_mu = x_dim //4,             # Number of features for μ₀(x)
+                                k_tau = x_dim //4,            # Number of features for μ₁(x)
+                                k_pi = x_dim //4,             # Features affecting π(x)
+                                seed = sim,
+                                train_ratio = 0.7,
+                                noise_std = 1.0,
+                                binary = False,
+                                non_treated_frac = 0.1  # e.g., 0.1 for forcing 10% untreated
+                            )
 
             X_train = res_train_test["x_train"]
             # print(X_train.head())
@@ -144,10 +169,10 @@ for x_dim in [25,50,100,300,500,1000]:
             #print("X_train:", X_train.shape)   # e.g. (7000, 10)
             #print("Z_train:", Z_train.shape)   # e.g. (7000, 1)
             #print("y_train:", y_train.shape)   # e.g. (7000, 1)
-
+            hidden_dim = 64
             params = dict(
                     max_iter=50000, tol=1e-2,
-                    hidden_dim=64, lr=0.01,
+                    hidden_dim=hidden_dim, lr=0.01,
                     patience=100, patience_lr=25,
                     factor_lr=0.5
                 )
@@ -283,7 +308,7 @@ for x_dim in [25,50,100,300,500,1000]:
             })
             # --- save learning curves ---
             if save_learning_curve and sim < 5:
-                fname = f'learning_curves_{sim}_STXM_x_dim_{x_dim}_size_{size_sample}_scenario_{scen}.pdf'
+                fname = f'learning_curves_{sim}_STXM_x_dim_{x_dim}_size_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.pdf'
                 with PdfPages(fname) as pdf:
                     for title, tr, val in [
                         ('S-learner', s_tr, s_val),
@@ -321,8 +346,8 @@ for x_dim in [25,50,100,300,500,1000]:
         df_time = pd.DataFrame(time_records)
 
         # Save raw per-simulation results
-        df_pehe.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}.csv"), index=False)
-        df_time.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}.csv"), index=False)
+        df_pehe.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.csv"), index=False)
+        df_time.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.csv"), index=False)
 
         # Compute Q1, median, Q3 summaries
         summary_pehe = df_pehe.drop(columns='sim').quantile([0.25, 0.5, 0.75]).T
@@ -332,7 +357,7 @@ for x_dim in [25,50,100,300,500,1000]:
 
         # Combine and save summary
         summary = pd.concat({'PEHE': summary_pehe, 'Time(s)': summary_time}, axis=1)
-        summary.to_csv(os.path.join(results_dir, f"summary_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}.csv"))
+        summary.to_csv(os.path.join(results_dir, f"summary_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.csv"))
 
         print("\nCombined Performance and Time Summary (rounded):")
         print(summary.round(4))
