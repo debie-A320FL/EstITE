@@ -11,7 +11,7 @@ library(scatterplot3d)
 set.seed(123)
 
 # PARAMETERS
-d <- 5      # dimension (e.g. 3, 10, 50)
+d <- 10      # dimension (e.g. 3, 10, 50)
 K <- 3       # number of groups
 N <- 50000   # number of samples for Monte-Carlo
 
@@ -20,20 +20,30 @@ raw <- matrix(rnorm(d*K), nrow=K, ncol=d)
 mu <- t(apply(raw, 1, function(x) x / sqrt(sum(x^2))))
 
 # 2) Define covariance matrices (Σ_i)
-make_ar1_cov <- function(rho, d) {
-  mat <- outer(1:d, 1:d, function(i, j) rho^abs(i - j))
+make_ar1_cov <- function(rho, d, sigma = 1) {
+  mat <- outer(1:d, 1:d, function(i, j) sigma*rho^abs(i - j))
   return(mat)
 }
 
 # Each group gets its own AR(1)-type covariance with a random rho in (-0.9, 0.9)
 
-rho = 0.9 # the closer to 1, the less spread, so the easier it is to distinguish the groups
+rho = 0.10 # the closer to 1, the less spread, so the easier it is to distinguish the groups
 rhos <- rep(rho, K)
-sigmas <- lapply(rhos, function(rho) make_ar1_cov(rho, d))
+
+# rhos <- c(0.5, 0.7, 0.3)
+sigmas <- rep(0.01, K)
+
+# Combine rhos and sigmas into a list of pairs
+params <- mapply(function(rho, sigma) list(rho = rho, sigma = sigma), rhos, sigmas, SIMPLIFY = FALSE)
+
+# Generate covariance matrices using lapply
+cov_matrices <- lapply(params, function(p) make_ar1_cov(p$rho, d, p$sigma))
+
+# sigmas <- lapply(rhos, function(rho) make_ar1_cov(rho, d))
 
 # Precompute Cholesky and det
-chol_list <- lapply(sigmas, chol)
-det_list  <- sapply(sigmas, det)
+chol_list <- lapply(cov_matrices, chol)
+det_list  <- sapply(cov_matrices, det)
 
 # 3) Closed-form distances
 pairs <- combn(K, 2)
@@ -44,7 +54,7 @@ rho <- matrix(0, K, K)
 for(idx in 1:ncol(pairs)) {
   i <- pairs[1, idx]; j <- pairs[2, idx]
   # mixture covariance
-  Sij <- (sigmas[[i]] + sigmas[[j]]) / 2
+  Sij <- (cov_matrices[[i]] + cov_matrices[[j]]) / 2
   invSij <- solve(Sij)
   
   diff <- mu[i,] - mu[j,]
@@ -93,13 +103,13 @@ X  <- matrix(0, nrow=N, ncol=d)
 for(i in 1:K) {
   ni <- sum(zs == i)
   if(ni > 0) {
-    X[zs==i, ] <- mvrnorm(ni, mu=mu[i,], Sigma=sigmas[[i]])
+    X[zs==i, ] <- mvrnorm(ni, mu=mu[i,], Sigma=cov_matrices[[i]])
   }
 }
 
 # compute log-densities and assign
 logdens <- sapply(1:K, function(i) {
-  dmvnorm(X, mean=mu[i,], sigma=sigmas[[i]], log=TRUE) + log(1/K)
+  dmvnorm(X, mean=mu[i,], sigma=cov_matrices[[i]], log=TRUE) + log(1/K)
 })
 pred <- max.col(logdens)
 
