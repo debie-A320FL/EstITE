@@ -24,7 +24,8 @@ def train_group(
     patience=10,
     patience_lr=20,
     factor_lr=0.25,
-    binary=False
+    binary=False,
+    verbose=False
 ):
     """
     Generic training + rollback patience, with optional GPU support.
@@ -104,7 +105,8 @@ def train_group(
         scheduler.step(loss_val)
         curr_lr = optimizer.param_groups[0]['lr']
         if curr_lr != prev_lr:
-            print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
+            if verbose:
+                print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
             prev_lr = curr_lr
 
         # early‐stop / rollback
@@ -117,12 +119,14 @@ def train_group(
         if no_imp >= patience:
             rollback_epoch = epoch - patience
             model.load_state_dict(recent_states[0])
-            print(f"Stopping at epoch {epoch} — rolling back to epoch {rollback_epoch}.")
+            if verbose:
+                print(f"Stopping at epoch {epoch} — rolling back to epoch {rollback_epoch}.")
             break
 
         if epoch == max_iter:
             rollback_epoch = max_iter
-            print(f"Reached max_iter={max_iter}, using epoch {rollback_epoch}.")
+            if verbose:
+                print(f"Reached max_iter={max_iter}, using epoch {rollback_epoch}.")
 
     return model, scaler, train_losses, val_losses, rollback_epoch
 
@@ -136,7 +140,8 @@ def train_multitask_group(
     patience=10,
     patience_lr=20,
     factor_lr=0.25,
-    binary=False
+    binary=False,
+    verbose=False,
 ):
     """
     Multi‐task training + rollback patience, with optional GPU support.
@@ -246,7 +251,8 @@ def train_multitask_group(
         scheduler.step(loss_val)
         curr_lr = optimizer.param_groups[0]['lr']
         if curr_lr != prev_lr:
-            print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
+            if verbose:
+                print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
             prev_lr = curr_lr
 
         # EARLY STOP + ROLLBACK
@@ -259,23 +265,26 @@ def train_multitask_group(
         if no_imp >= patience:
             rollback_epoch = epoch - patience
             model.load_state_dict(recent_states[0])
-            print(f"M-learner: stopping at epoch {epoch}, rolling back to {rollback_epoch}.")
+            if verbose:
+                print(f"M-learner: stopping at epoch {epoch}, rolling back to {rollback_epoch}.")
             break
 
         if epoch == max_iter:
             rollback_epoch = max_iter
-            print(f"M-learner: reached max_iter={max_iter}, using epoch {rollback_epoch}.")
+            if verbose:
+                print(f"M-learner: reached max_iter={max_iter}, using epoch {rollback_epoch}.")
 
     return model, scaler, train_losses, val_losses, rollback_epoch
 
-def train_s_learner(X, Z, y, **train_kwargs):
+def train_s_learner(X, Z, y, verbose = False,**train_kwargs):
     Xz = np.concatenate([X, Z], axis=1)
-    model, scaler, tr, val, roll = train_group(Xz, y, **train_kwargs)
-    print(f"S-learner: parameters from epoch {roll}\n")
+    model, scaler, tr, val, roll = train_group(Xz, y, verbose=verbose,**train_kwargs)
+    if verbose:
+        print(f"S-learner: parameters from epoch {roll}\n")
     return model, scaler, tr, val
 
 
-def train_t_learner(X, Z, y, **train_kwargs):
+def train_t_learner(X, Z, y,verbose = False, **train_kwargs):
     # 2) Sanity‐check
     Z = np.asarray(Z, dtype=np.float32).reshape(-1)   # (n,)
     #print(f"[T‑learner] Full data shapes → X: {X.shape}, Z: {Z.shape}, y: {y.shape}")
@@ -292,10 +301,12 @@ def train_t_learner(X, Z, y, **train_kwargs):
 
     #X0, y0 = X[Z[:,0]==0], y[Z[:,0]==0]
     #X1, y1 = X[Z[:,0]==1], y[Z[:,0]==1]
-    m0, s0, t0_tr, t0_val, r0 = train_group(X0, y0, **train_kwargs)
-    print(f"T-learner (Z=0): parameters from epoch {r0}")
-    m1, s1, t1_tr, t1_val, r1 = train_group(X1, y1, **train_kwargs)
-    print(f"T-learner (Z=1): parameters from epoch {r1}\n")
+    m0, s0, t0_tr, t0_val, r0 = train_group(X0, y0, verbose=verbose,**train_kwargs)
+    if verbose:
+        print(f"T-learner (Z=0): parameters from epoch {r0}")
+    m1, s1, t1_tr, t1_val, r1 = train_group(X1, y1, verbose=verbose,**train_kwargs)
+    if verbose:
+        print(f"T-learner (Z=1): parameters from epoch {r1}\n")
     return m0, s0, t0_tr, t0_val, m1, s1, t1_tr, t1_val
 
 
@@ -305,6 +316,7 @@ def train_x_learner(
     y,
     compute_t: bool = True,
     t_models: tuple = None,
+    verbose = False,
     **train_kwargs       # gathers hidden_dim, lr, max_iter, tol, patience, patience_lr, factor_lr, binary, etc.
 ):
     """
@@ -326,6 +338,7 @@ def train_x_learner(
     if compute_t:
         m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(
             X, Z, y,
+            verbose=verbose,
             **train_kwargs
         )
     else:
@@ -356,18 +369,22 @@ def train_x_learner(
     # 6) fit τ₀ via train_group
     tau0_model, scaler_tau0, tr0, val0, rb0 = train_group(
         X0, D0,
+        verbose=verbose,
         **train_kwargs
     )
     tau0_model = tau0_model.to(device)
-    print(f"X-learner τ₀: parameters from epoch {rb0}")
+    if verbose:
+        print(f"X-learner τ₀: parameters from epoch {rb0}")
 
     # 7) fit τ₁ via train_group
     tau1_model, scaler_tau1, tr1, val1, rb1 = train_group(
         X1, D1,
+        verbose=verbose,
         **train_kwargs
     )
     tau1_model = tau1_model.to(device)
-    print(f"X-learner τ₁: parameters from epoch {rb1}")
+    if verbose:
+        print(f"X-learner τ₁: parameters from epoch {rb1}")
 
     return (
         prop_model,
@@ -377,12 +394,13 @@ def train_x_learner(
     )
 
 
-def train_m_learner(X, Z, y, **train_kwargs):
-    model, scaler, tr, val, r = train_multitask_group(X, Z, y, **train_kwargs)
-    print(f"M-learner: parameters from epoch {r}\n")
+def train_m_learner(X, Z, y, verbose=False, **train_kwargs):
+    model, scaler, tr, val, r = train_multitask_group(X, Z, y, verbose=verbose, **train_kwargs)
+    if verbose:
+        print(f"M-learner: parameters from epoch {r}\n")
     return model, scaler, tr, val
 
-def train_ra_learner(X, Z, y, **train_kwargs):
+def train_ra_learner(X, Z, y, verbose=False,**train_kwargs):
     """
     RA Learner using neural networks for mu0 and mu1.
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
@@ -408,11 +426,12 @@ def train_ra_learner(X, Z, y, **train_kwargs):
     Y_tilde = Y_tilde.reshape(-1, 1)
 
     # Fit final tau model
-    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, **train_kwargs)
-    print(f"RA learner: parameters from epoch {rollback}\n")
+    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, verbose=verbose,**train_kwargs)
+    if verbose:
+        print(f"RA learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
-def train_dr_learner(X, Z, y, **train_kwargs):
+def train_dr_learner(X, Z, y, verbose=False, **train_kwargs):
     """
     DR Learner using neural networks and logistic regression.
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
@@ -443,11 +462,12 @@ def train_dr_learner(X, Z, y, **train_kwargs):
     Y_tilde = (term1 + term2).reshape(-1, 1)
 
     # Final tau model
-    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, **train_kwargs)
-    print(f"DR learner: parameters from epoch {rollback}\n")
+    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, verbose=verbose, **train_kwargs)
+    if verbose:
+        print(f"DR learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
-def train_r_learner(X, Z, y, **train_kwargs):
+def train_r_learner(X, Z, y, verbose=False, **train_kwargs):
     """
     R Learner using neural networks for m(x), logistic regression for pi(x).
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
@@ -456,7 +476,7 @@ def train_r_learner(X, Z, y, **train_kwargs):
     X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
 
     # 1. Fit mu model on full data
-    m_model, m_scaler, _, _, _ = train_group(X1, y1, **train_kwargs)
+    m_model, m_scaler, _, _, _ = train_group(X1, y1, verbose=verbose,**train_kwargs)
     m_model = m_model.to(torch.device("cuda" if torch.cuda.is_available() else "cpu"))
 
     # 2. Fit propensity model
@@ -474,8 +494,9 @@ def train_r_learner(X, Z, y, **train_kwargs):
     y_r = (y_resid / (w_resid + 1e-8)).reshape(-1, 1)
 
     # Fit tau model
-    tau_model, scaler_tau, tr, val, rollback = train_group(X_aug, y_r, **train_kwargs)
-    print(f"R learner: parameters from epoch {rollback}\n")
+    tau_model, scaler_tau, tr, val, rollback = train_group(X_aug, y_r, verbose=verbose, **train_kwargs)
+    if verbose:
+        print(f"R learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
 # define estimators

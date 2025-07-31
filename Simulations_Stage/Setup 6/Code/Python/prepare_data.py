@@ -2,6 +2,10 @@ import numpy as np
 import pandas as pd
 import os
 
+from sklearn.metrics import silhouette_score, confusion_matrix
+from scipy.stats import multivariate_normal
+import matplotlib.pyplot as plt
+
 def generate_data(n=1000,
                   age_mean=48, age_sd=6,
                   weight_mean_male=80, weight_sd_male=8,
@@ -504,11 +508,278 @@ def prepare_train_data_scenario3(
         "Test_ITE": ITE_test, "Test_CATT": Test_CATT, "Test_CATC": Test_CATC,
     }
 
+def make_ar1_cov(rho: float, d: int, sigma: float = 1.0) -> np.ndarray:
+    """
+    Build a d×d AR(1) covariance matrix with parameter rho and marginal std sigma.
+    """
+    idx = np.arange(d)
+    return sigma * (rho ** np.abs(idx[:, None] - idx[None, :]))
+
+def prepare_train_data_mixture1(
+    size_sample: int,
+    x_dim: int,
+    n_groups: int = 3,
+    sigma_list: list[float] = None,
+    rho_list: list[float] = None,
+    ite_list: list[float] = None,
+    prop_list: list[float] = None,
+    seed: int = 123,
+    train_ratio: float = 0.7,
+    noise_std: float = 1.0,
+    binary: bool = False,
+    non_treated_frac: float = None  # override to force fraction untreated
+) -> dict:
+    """
+    Scenario 1: Gaussian‐mixture covariates + group‐specific constant ITE.
+
+    Parameters
+    ----------
+    size_sample : int
+      total number of samples.
+    x_dim : int
+      feature dimension.
+    n_groups : int, default=3
+      number of mixture components / groups.
+    sigma_list : list of float, length n_groups
+      marginal standard deviations for each component.
+    rho_list : list of float, length n_groups
+      AR(1) correlation parameters for each component.
+    ite_list : list of float, length n_groups
+      constant treatment effect for each group.
+    prop_list : list of float, length n_groups
+      mixture proportions (must sum to 1). Defaults to equal.
+    seed : int
+      random seed.
+    train_ratio : float
+      fraction of data to use for training.
+    noise_std : float
+      noise standard deviation for outcomes.
+    binary : bool
+      whether to threshold outcomes into binary via logistic.
+    non_treated_frac : float, optional
+      if set, fixes the fraction of controls to this value.
+
+    Returns
+    -------
+    dict
+      {
+        "x_train": DataFrame, "z_train": array, "y_train": array,
+        "x_test": DataFrame,  "z_test": array,  "y_test": array,
+        "Test_ITE": array,    "Test_CATT": array, "Test_CATC": array
+      }
+    """
+    np.random.seed(seed)
+
+    # Defaults
+    if sigma_list is None:
+        sigma_list = [1.0] * n_groups
+    if rho_list is None:
+        rho_list = [0.5] * n_groups
+    if ite_list is None:
+        ite_list = [1.0 * (i + 1) for i in range(n_groups)]
+    if prop_list is None:
+        prop_list = [1.0 / n_groups] * n_groups
+
+    # 1) Draw group means on the unit sphere
+    means = []
+    for _ in range(n_groups):
+        v = np.random.normal(size=x_dim)
+        means.append(v / np.linalg.norm(v))
+    means = np.vstack(means)  # shape (n_groups, x_dim)
+
+    # 2) Build covariances
+    covs = [make_ar1_cov(rho_list[i], x_dim, sigma_list[i]) for i in range(n_groups)]
+
+    # 3) Sample group labels
+    groups = np.random.choice(n_groups, size=size_sample, p=prop_list)
+
+    # 4) Generate X by group
+    X = np.zeros((size_sample, x_dim))
+    for g in range(n_groups):
+        idx = np.where(groups == g)[0]
+        if len(idx) > 0:
+            X[idx] = np.random.multivariate_normal(means[g], covs[g], size=len(idx))
+
+    dfX = pd.DataFrame(X, columns=[f"x{j}" for j in range(x_dim)])
+
+    # 5) Set individual treatment effect
+    tau = np.array([ite_list[g] for g in groups])
+
+    # 6) Random treatment assignment
+    if non_treated_frac is not None:
+        n_control = int(non_treated_frac * size_sample)
+        # pick lowest-risk (random here) to be control
+        perm = np.random.permutation(size_sample)
+        Z = np.ones(size_sample, dtype=int)
+        Z[perm[:n_control]] = 0
+    else:
+        Z = np.random.binomial(1, 0.5, size_sample)
+
+    # 7) Generate potential outcomes
+    # Here baseline mu0 is zero
+    Y0 = np.random.normal(0, noise_std, size_sample)
+    Y1 = Y0 + tau
+
+    # Observed outcome
+    Y_cont = Y0 * (1 - Z) + Y1 * Z
+    if binary:
+        pY = 1 / (1 + np.exp(-Y_cont))
+        Y = np.random.binomial(1, pY)
+    else:
+        Y = Y_cont
+
+    # 8) Train-test split
+    idx_all = np.arange(size_sample)
+    np.random.shuffle(idx_all)
+    n_train = int(train_ratio * size_sample)
+    tr_idx, te_idx = idx_all[:n_train], idx_all[n_train:]
+
+    def split(a): return a[tr_idx], a[te_idx]
+
+    x_train, x_test = dfX.iloc[tr_idx], dfX.iloc[te_idx]
+    z_train, z_test = split(Z)
+    y_train, y_test = split(Y)
+    group_train, group_test = split(groups)
+    ite_test = tau[te_idx]
+    catt = ite_test[z_test == 1]
+    catc = ite_test[z_test == 0]
+
+    return {
+        "x_train": x_train,   "z_train": z_train,   "y_train": y_train, "group_train": group_train,
+        "x_test": x_test,     "z_test": z_test,     "y_test": y_test, "group_test": group_test,
+        "Test_ITE": ite_test, "Test_CATT": catt,    "Test_CATC": catc, "group_means" : means
+    }
+
+
+def analyze_mixture(
+    data: dict,
+    rho_list: list[float],
+    sigma_list: list[float],
+    save_prefix: str = "mixture_analysis"
+):
+    """
+    Analyze and visualize group separation from a mixture-data dict.
+
+    Parameters
+    ----------
+    data : dict
+      Output of prepare_train_data_mixture1 (must contain keys
+      "x_test", "group_test", "group_means").
+    rho_list : list of float
+      The AR(1) rho parameter for each group in the same order as `group_means`.
+    sigma_list : list of float
+      The AR(1) marginal sigma for each group.
+    save_prefix : str
+      File-prefix for the saved plots (will write
+      "{save_prefix}_2d.png" and "{save_prefix}_3d.png").
+    """
+    X_test     = data["x_test"].values
+    groups     = data["group_test"]
+    means      = data["group_means"]
+    n_groups   = means.shape[0]
+    d          = X_test.shape[1]
+
+    # 1) Pairwise metrics
+    DM   = np.zeros((n_groups, n_groups))
+    DB   = np.zeros((n_groups, n_groups))
+    rho_ov = np.zeros((n_groups, n_groups))
+    cosS  = means @ means.T
+
+    dets = []
+    covs = []
+    for i in range(n_groups):
+        Ci = make_ar1_cov(rho_list[i], d, sigma_list[i])
+        covs.append(Ci)
+        dets.append(np.linalg.det(Ci))
+
+    for i in range(n_groups):
+        for j in range(i+1, n_groups):
+            Sij    = 0.5 * (covs[i] + covs[j])
+            invSij = np.linalg.inv(Sij)
+            diff   = means[i] - means[j]
+
+            DM[i,j]      = DM[j,i]      = np.sqrt(diff @ invSij @ diff)
+            term1        = 0.125 * diff @ invSij @ diff
+            term2        = 0.5   * np.log(np.linalg.det(Sij) / np.sqrt(dets[i]*dets[j]))
+            DB[i,j]      = DB[j,i]      = term1 + term2
+            rho_ov[i,j]  = rho_ov[j,i]  = np.exp(-DB[i,j])
+
+    print("Cosine similarities:\n", np.round(cosS, 3))
+    print("Mahalanobis distances:\n", np.round(DM, 3))
+    print("Bhattacharyya distances:\n", np.round(DB, 3))
+    print("Overlap coefficients:\n", np.round(rho_ov, 3))
+
+    # 2) Silhouette on test set
+    sil = silhouette_score(X_test, groups)
+    print(f"\nSilhouette score (test): {sil:.3f}")
+
+    # 3) Density‐based “recovery” error
+    logdens = np.vstack([
+        multivariate_normal.logpdf(X_test, mean=means[g], cov=covs[g])
+        for g in range(n_groups)
+    ]).T + np.log(1.0 / n_groups)
+    pred = np.argmax(logdens, axis=1)
+    err  = np.mean(pred != groups)
+    conf = confusion_matrix(groups, pred)
+    print(f"Misclassification rate: {err:.3f}")
+    print("Confusion matrix:\n", conf)
+
+    # 4) 2D random projection
+    P2 = np.linalg.qr(np.random.randn(d, 2))[0]
+    Y2 = X_test @ P2
+    plt.figure(figsize=(6,6))
+    plt.scatter(Y2[:,0], Y2[:,1], c=groups, s=1, alpha=0.5)
+    plt.title("2D Random Projection")
+    plt.xlabel("Comp 1"); plt.ylabel("Comp 2")
+    plt.tight_layout()
+    plt.savefig(f"{save_prefix}_2d.png", dpi=150)
+    plt.close()
+
+    # 5) 3D random projection
+    P3 = np.linalg.qr(np.random.randn(d, 3))[0]
+    Y3 = X_test @ P3
+    fig = plt.figure(figsize=(6,6))
+    ax  = fig.add_subplot(111, projection="3d")
+    ax.scatter(Y3[:,0], Y3[:,1], Y3[:,2], c=groups, s=1, alpha=0.5)
+    ax.set_title("3D Random Projection")
+    ax.set_xlabel("PC1"); ax.set_ylabel("PC2"); ax.set_zlabel("PC3")
+    plt.tight_layout()
+    plt.savefig(f"{save_prefix}_3d.png", dpi=150)
+    plt.close()
+
+
 
 if __name__ == "__main__":
-    output = prepare_train_data_null_cate_indep_treatment(size_sample = 10000, x_dim = 5, seed=123,
-                                                 train_ratio=0.7, treatment_prob=0.1,
-                                                 binary=True)
+
+    n_groups    = 3
+    size_sample = 10000
+    x_dim = 25
+    sigma_list = [1.0, 1.0, 1.0]         # Marginal std dev for each of the 3 Gaussians
+    rho_list   = [0.9, 0.9, 0.9]         # AR(1) correlation for each group
+    ite_list   = [0.0, 2.0, -1.0]        # Constant ITE for each group
+    prop_list  = [0.5, 0.3, 0.2]         # 50% in group0, 30% in group1, 20% in group2
+
+    # 2. Generate the data
+    output = prepare_train_data_mixture1(
+        size_sample=size_sample,
+        x_dim=x_dim,
+        n_groups=n_groups,
+        sigma_list=sigma_list,
+        rho_list=rho_list,
+        ite_list=ite_list,
+        prop_list=prop_list,
+        train_ratio=0.7,
+        noise_std=1.0,
+        binary=True,
+        non_treated_frac=0.1
+    )
+
+    analyze_mixture(
+         output,
+         rho_list=rho_list,
+         sigma_list=sigma_list,
+         save_prefix="my_mixture"
+     )
 
     def summarize_output(data_dict):
         print("=== x_train ===")
