@@ -174,7 +174,7 @@ for x_dim in x_dim_list:
                     res_train_test,
                     rho_list=rho_list,
                     sigma_list=sigma_list,
-                    save_prefix=save_prefix_plt,
+                    save_prefix_plt=save_prefix_plt,
                     save_prefix_met=save_prefix_met,
                     save_fig=sim < 5
                 )
