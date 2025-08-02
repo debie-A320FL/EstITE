@@ -58,17 +58,20 @@ data_train_test = pd.read_csv("./../Setup 1a/Data/simulated_1M_data.csv")
 hyperparams = hyperparams_df.iloc[0].to_dict()
 
 # treatment_percentile = 10
-for x_dim in [25]:
+
+x_dim_list  = [25,50,100,300,500,1000]
+
+for x_dim in x_dim_list:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Options
-    B = 20  # Num of simulations
+    B = 100  # Num of simulations
 
     size_sample_list = [int(1e5)]
     size_sample = size_sample_list[0]
 
-    sigma_single_list = [0.05, 0.1, 0.2, 0.3, 0.5, 1, 1.5, 2, 3, 5]
+    sigma_single_list = [0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 3, 5]
 
     for sigma in sigma_single_list:
         print(f"sigma = {sigma}")
@@ -165,13 +168,15 @@ for x_dim in [25]:
                 )
 
                 print("\nBeginning of the analysis")
-                save_prefix = f"Figures/mixture_plot_{sim}_sigma_{sigma}"
+                save_prefix_plt = f"Figures/mixture_plot_{sim}_sigma_{sigma}_dim_{x_dim}_size_{size_sample}_scenario_{scen}_"
+                save_prefix_met = f"Metrics/mixture_metrics_{sim}_sigma_{sigma}_dim_{x_dim}_size_{size_sample}_scenario_{scen}_"
                 analyze_mixture(
                     res_train_test,
                     rho_list=rho_list,
                     sigma_list=sigma_list,
-                    save_prefix=save_prefix,
-                    save_fig=sim < 3
+                    save_prefix=save_prefix_plt,
+                    save_prefix_met=save_prefix_met,
+                    save_fig=sim < 5
                 )
                 print("End of the analysis\n\n\n")
 
@@ -345,7 +350,7 @@ for x_dim in [25]:
                 'RA-NN': time_ra, 'DR-NN': time_dr, 'R-NN': time_r
             })
             # --- save learning curves ---
-            if save_learning_curve and sim < 3:
+            if save_learning_curve and sim < 5:
                 fname = f'learning_curves/learning_curves_{sim}_STXM_x_dim_{x_dim}_size_{size_sample}_scenario_{scen}_sigma_{sigma}.pdf'
                 with PdfPages(fname) as pdf:
                     for title, tr, val in [
@@ -384,8 +389,8 @@ for x_dim in [25]:
         df_time = pd.DataFrame(time_records)
 
         # Save raw per-simulation results
-        df_pehe.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
-        df_time.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
+        df_pehe.to_csv(os.path.join(results_dir, f"_B_{B}x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
+        df_time.to_csv(os.path.join(results_dir, f"_B_{B}x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
 
         # Compute Q1, median, Q3 summaries
         summary_pehe = df_pehe.drop(columns='sim').quantile([0.25, 0.5, 0.75]).T
@@ -395,7 +400,7 @@ for x_dim in [25]:
 
         # Combine and save summary
         summary = pd.concat({'PEHE': summary_pehe, 'Time(s)': summary_time}, axis=1)
-        summary.to_csv(os.path.join(results_dir, f"summary_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"))
+        summary.to_csv(os.path.join(results_dir, f"summary_B_{B}_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"))
 
         print("\nCombined Performance and Time Summary (rounded):")
         print(summary.round(4))

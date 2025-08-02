@@ -655,30 +655,17 @@ def analyze_mixture(
     data: dict,
     rho_list: list[float],
     sigma_list: list[float],
-    save_prefix: str = "mixture_analysis",
+    save_prefix_plt: str = "mixture_analysis",
+    save_prefix_met: str = "mixture_analysis",
     save_fig: bool = True
 ):
-    """
-    Analyze and visualize group separation from a mixture-data dict.
-
-    Parameters
-    ----------
-    data : dict
-      Output of prepare_train_data_mixture1 (must contain keys
-      "x_test", "group_test", "group_means").
-    rho_list : list of float
-      The AR(1) rho parameter for each group in the same order as `group_means`.
-    sigma_list : list of float
-      The AR(1) marginal sigma for each group.
-    save_prefix : str
-      File-prefix for the saved plots (will write
-      "{save_prefix}_2d.png" and "{save_prefix}_3d.png").
-    """
     X_test     = data["x_test"].values
     groups     = data["group_test"]
     means      = data["group_means"]
     n_groups   = means.shape[0]
     d          = X_test.shape[1]
+
+    log_lines = []
 
     # 1) Pairwise metrics
     DM   = np.zeros((n_groups, n_groups))
@@ -705,16 +692,25 @@ def analyze_mixture(
             DB[i,j]      = DB[j,i]      = term1 + term2
             rho_ov[i,j]  = rho_ov[j,i]  = np.exp(-DB[i,j])
 
-    print("Cosine similarities:\n", np.round(cosS, 3))
-    print("Mahalanobis distances:\n", np.round(DM, 3))
-    print("Bhattacharyya distances:\n", np.round(DB, 3))
-    print("Overlap coefficients:\n", np.round(rho_ov, 3))
+    cosS_str = f"Cosine similarities:\n{np.round(cosS, 3)}"
+    DM_str   = f"Mahalanobis distances:\n{np.round(DM, 3)}"
+    DB_str   = f"Bhattacharyya distances:\n{np.round(DB, 3)}"
+    OV_str   = f"Overlap coefficients:\n{np.round(rho_ov, 3)}"
+
+    print(cosS_str)
+    print(DM_str)
+    print(DB_str)
+    print(OV_str)
+
+    log_lines.extend([cosS_str, DM_str, DB_str, OV_str])
 
     # 2) Silhouette on test set
     sil = silhouette_score(X_test, groups)
-    print(f"\nSilhouette score (test): {sil:.3f}")
+    sil_str = f"\nSilhouette score (test): {sil:.3f}"
+    print(sil_str)
+    log_lines.append(sil_str)
 
-    # 3) Density‐based “recovery” error
+    # 3) Density-based misclassification
     logdens = np.vstack([
         multivariate_normal.logpdf(X_test, mean=means[g], cov=covs[g])
         for g in range(n_groups)
@@ -722,11 +718,21 @@ def analyze_mixture(
     pred = np.argmax(logdens, axis=1)
     err  = np.mean(pred != groups)
     conf = confusion_matrix(groups, pred)
-    print(f"Misclassification rate: {err:.3f}")
-    print("Confusion matrix:\n", conf)
+    err_str = f"Misclassification rate: {err:.3f}"
+    conf_str = f"Confusion matrix:\n{conf}"
 
+    print(err_str)
+    print(conf_str)
+
+    log_lines.extend([err_str, conf_str])
+
+    # Write metrics to text file
+    with open(f"{save_prefix_met}_metrics.txt", "w") as f:
+        f.write("\n\n".join(log_lines))
+
+    # 4) Visualizations
     if save_fig:
-        # 4) 2D random projection
+        # 2D projection
         P2 = np.linalg.qr(np.random.randn(d, 2))[0]
         Y2 = X_test @ P2
         plt.figure(figsize=(6,6))
@@ -734,10 +740,10 @@ def analyze_mixture(
         plt.title("2D Random Projection")
         plt.xlabel("Comp 1"); plt.ylabel("Comp 2")
         plt.tight_layout()
-        plt.savefig(f"{save_prefix}_2d.png", dpi=150)
+        plt.savefig(f"{save_prefix_plt}_2d.png", dpi=150)
         plt.close()
 
-        # 5) 3D random projection
+        # 3D projection
         P3 = np.linalg.qr(np.random.randn(d, 3))[0]
         Y3 = X_test @ P3
         fig = plt.figure(figsize=(6,6))
@@ -746,7 +752,7 @@ def analyze_mixture(
         ax.set_title("3D Random Projection")
         ax.set_xlabel("PC1"); ax.set_ylabel("PC2"); ax.set_zlabel("PC3")
         plt.tight_layout()
-        plt.savefig(f"{save_prefix}_3d.png", dpi=150)
+        plt.savefig(f"{save_prefix_plt}_3d.png", dpi=150)
         plt.close()
 
 
@@ -775,12 +781,15 @@ if __name__ == "__main__":
         binary=True,
         non_treated_frac=0.1
     )
-    save_prefix = f"Figures/my_mixture_0_sigma_1"
+
+    save_prefix_met = f"Metrics/my_mixture_0_sigma_1"
+    save_prefix_plt = f"Figures/my_mixture_0_sigma_1"
     analyze_mixture(
          output,
          rho_list=rho_list,
          sigma_list=sigma_list,
-         save_prefix=save_prefix
+         save_prefix_met=save_prefix_met,
+         save_prefix_plt=save_prefix_plt
      )
 
     def summarize_output(data_dict):
