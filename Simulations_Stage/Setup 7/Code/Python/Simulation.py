@@ -61,19 +61,19 @@ hyperparams = hyperparams_df.iloc[0].to_dict()
 
 x_dim_list  = [25,50,100,300,500,1000]
 
-for x_dim in x_dim_list:
+for x_dim in x_dim_list[2:3]:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Options
-    B = 100  # Num of simulations
+    B = 250  # Num of simulations
 
     size_sample_list = [int(1e5)]
     size_sample = size_sample_list[0]
 
-    sigma_single_list = [0.05, 0.1, 0.2, 0.3, 0.5, 1, 2, 3, 5]
+    sigma_single_list = [0.2, 0.3, 0.5, 1, 2, 3]
 
-    for sigma in sigma_single_list:
+    for sigma in sigma_single_list[3:4]:
         print(f"sigma = {sigma}")
 
         pehe_records = []
@@ -176,7 +176,7 @@ for x_dim in x_dim_list:
                     sigma_list=sigma_list,
                     save_prefix_plt=save_prefix_plt,
                     save_prefix_met=save_prefix_met,
-                    save_fig=sim < 5
+                    save=sim < 5
                 )
                 print("End of the analysis\n\n\n")
 
@@ -389,8 +389,8 @@ for x_dim in x_dim_list:
         df_time = pd.DataFrame(time_records)
 
         # Save raw per-simulation results
-        df_pehe.to_csv(os.path.join(results_dir, f"_B_{B}x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
-        df_time.to_csv(os.path.join(results_dir, f"_B_{B}x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
+        df_pehe.to_csv(os.path.join(results_dir, f"B_{B}_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
+        df_time.to_csv(os.path.join(results_dir, f"B_{B}_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
 
         # Compute Q1, median, Q3 summaries
         summary_pehe = df_pehe.drop(columns='sim').quantile([0.25, 0.5, 0.75]).T

@@ -657,7 +657,7 @@ def analyze_mixture(
     sigma_list: list[float],
     save_prefix_plt: str = "mixture_analysis",
     save_prefix_met: str = "mixture_analysis",
-    save_fig: bool = True
+    save: bool = True
 ):
     X_test     = data["x_test"].values
     groups     = data["group_test"]
@@ -726,12 +726,12 @@ def analyze_mixture(
 
     log_lines.extend([err_str, conf_str])
 
-    # Write metrics to text file
-    with open(f"{save_prefix_met}_metrics.txt", "w") as f:
-        f.write("\n\n".join(log_lines))
+    if save:
+        # Write metrics to text file
+        with open(f"{save_prefix_met}_metrics.txt", "w") as f:
+            f.write("\n\n".join(log_lines))
 
-    # 4) Visualizations
-    if save_fig:
+        # 4) Visualizations
         # 2D projection
         P2 = np.linalg.qr(np.random.randn(d, 2))[0]
         Y2 = X_test @ P2
