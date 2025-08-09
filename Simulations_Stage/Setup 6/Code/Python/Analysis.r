@@ -1,6 +1,6 @@
 
 
-setwd("/home/onyxia/work/EstITE/Simulations_Stage/Setup 7")
+setwd("/home/onyxia/work/EstITE/Simulations_Stage/Setup 6")
 
 if(!require(stringr))     install.packages("stringr")
 
@@ -50,7 +50,6 @@ summary_stats <- function(csv_path, export = FALSE, pdf_folder = "output") {
     
     # Clean filename
     file_base <- basename(csv_path)
-    file_base <- sub("^pehe_.*?_", "", file_base) # remove prefix like pehe_B_500_
     file_base <- sub("\\.csv$", "", file_base)    # remove extension
     
     pdf_file <- file.path(pdf_folder, paste0("distribution_ridgeline_", file_base, ".pdf"))
