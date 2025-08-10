@@ -25,7 +25,8 @@ def train_group(
     patience_lr=20,
     factor_lr=0.25,
     binary=False,
-    verbose=False
+    verbose=False,
+    sample_weight=None,   # NEW: array-like shape (n_samples,) or (n_samples,1)
 ):
     """
     Generic training + rollback patience, with optional GPU support.
@@ -36,18 +37,23 @@ def train_group(
 
     # choose loss fn
     if binary:
-        loss_fn = nn.BCEWithLogitsLoss()
-    #    print("Using binary loss")
+        base_loss_fn = nn.BCEWithLogitsLoss(reduction='none')
     else:
-        loss_fn = nn.MSELoss()
-    #    print("Using continuous loss")
-
-    
+        base_loss_fn = nn.MSELoss(reduction='none')
 
     # split + scale
-    X_tr_np, X_val_np, y_tr_np, y_val_np = train_test_split(
-        X, y, test_size=0.2, random_state=42
-    )
+    if sample_weight is None:
+        X_tr_np, X_val_np, y_tr_np, y_val_np = train_test_split(
+            X, y, test_size=0.2, random_state=42
+        )
+        sw_tr_np = sw_val_np = None
+    else:
+        # split X, y, and sample_weight together so the train/val split aligns
+        sw_arr = np.asarray(sample_weight)
+        X_tr_np, X_val_np, y_tr_np, y_val_np, sw_tr_np, sw_val_np = train_test_split(
+            X, y, sw_arr, test_size=0.2, random_state=42
+        )
+
     scaler = StandardScaler()
     X_tr_np = scaler.fit_transform(X_tr_np.astype(np.float32))
     X_val_np = scaler.transform(X_val_np.astype(np.float32))
@@ -57,6 +63,12 @@ def train_group(
     y_tr = torch.from_numpy(y_tr_np.astype(np.float32)).to(device)
     X_val = torch.from_numpy(X_val_np).to(device)
     y_val = torch.from_numpy(y_val_np.astype(np.float32)).to(device)
+
+    if sw_tr_np is not None:
+        sw_tr_t = torch.from_numpy(np.asarray(sw_tr_np, dtype=np.float32).reshape(-1, 1)).to(device)
+        sw_val_t = torch.from_numpy(np.asarray(sw_val_np, dtype=np.float32).reshape(-1, 1)).to(device)
+    else:
+        sw_tr_t = sw_val_t = None
 
     # model → device
     input_dim = X_tr.shape[1]
@@ -84,9 +96,15 @@ def train_group(
         # — training —
         model.train()
         optimizer.zero_grad()
-        # loss_tr = nn.MSELoss()(model(X_tr), y_tr)
         logits = model(X_tr)            # raw outputs, shape (N,1)
-        loss_tr = loss_fn(logits, y_tr)
+
+        # elementwise loss, then apply sample weights if provided
+        loss_elem_tr = base_loss_fn(logits, y_tr)                # shape (N,1)
+        if sw_tr_t is not None:
+            loss_tr = (loss_elem_tr * sw_tr_t).mean()
+        else:
+            loss_tr = loss_elem_tr.mean()
+
         loss_tr.backward()
         optimizer.step()
 
@@ -96,9 +114,12 @@ def train_group(
         # — validation —
         model.eval()
         with torch.no_grad():
-            # loss_val = nn.MSELoss()(model(X_val), y_val).item()
             val_logits = model(X_val)
-            loss_val = loss_fn(val_logits, y_val).item()
+            loss_elem_val = base_loss_fn(val_logits, y_val)
+            if sw_val_t is not None:
+                loss_val = (loss_elem_val * sw_val_t).mean().item()
+            else:
+                loss_val = loss_elem_val.mean().item()
         val_losses.append(loss_val)
 
         # LR scheduler
@@ -467,12 +488,12 @@ def train_dr_learner(X, Z, y, verbose=False, **train_kwargs):
         print(f"DR learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
-def train_r_learner(X, Z, y, verbose=False, **train_kwargs):
+def train_r_learner2(X, Z, y, verbose=False, **train_kwargs):
     """
     R Learner using neural networks for m(x), logistic regression for pi(x).
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
     """
-
+    print("old")
     X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
 
     # 1. Fit mu model on full data
@@ -498,6 +519,74 @@ def train_r_learner(X, Z, y, verbose=False, **train_kwargs):
     if verbose:
         print(f"R learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
+
+def train_r_learner(X, Z, y, verbose=False, min_w=1e-2, clip_pi=1e-3, **train_kwargs):
+    """
+    R Learner using stabilized pseudo-outcome + sample weights and reusing train_group.
+    min_w: floor for |Z-pi| to avoid extreme y_tilde
+    clip_pi: clip propensity to [clip_pi, 1-clip_pi]
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # 1) split once for nuisance estimation (same as your old code)
+    X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
+
+    # 2) Fit mu model on X1 (uses your train_group that returns model + scaler)
+    m_model, m_scaler, _, _, _ = train_group(X1, y1, verbose=verbose, **train_kwargs)
+    m_model = m_model.to(device)
+
+    # 3) Fit propensity model on X1
+    prop_model = LogisticRegression().fit(X1, Z1.ravel())
+    pi = prop_model.predict_proba(X2)[:, 1]  # shape (n,)
+
+    # clip pi
+    pi = np.clip(pi, clip_pi, 1.0 - clip_pi)
+
+    # 4) Compute mu(X2)
+    X2_scaled_for_m = m_scaler.transform(X2.astype(np.float32))
+    with torch.no_grad():
+        mu_x = m_model(torch.from_numpy(X2_scaled_for_m).to(device)).cpu().numpy().ravel()
+
+    # 5) residuals and denominator
+    y_resid = (y2.ravel() - mu_x).astype(np.float32)   # shape (n,)
+    w = (Z2.ravel() - pi).astype(np.float32)          # shape (n,)
+
+    # protect small denominators: floor |w| to min_w, preserve sign
+    signs = np.sign(w)
+    signs[signs == 0] = 1.0
+    w_safe = np.where(np.abs(w) < min_w, signs * min_w, w).astype(np.float32)
+
+    # 6) pseudo-outcome and sample weights
+    y_tilde = (y_resid / w_safe).reshape(-1, 1).astype(np.float32)      # target for tau
+    sample_weights = (w_safe ** 2).reshape(-1, 1).astype(np.float32)    # algebraic weight
+
+    # Optionally cap extreme y_tilde -- I recommend doing this if y_tilde has huge tails
+    # (uncomment and tweak if desired)
+    # q = np.percentile(np.abs(y_tilde), 99.0)
+    # clip_bound = max(q, 1e-6)
+    # y_tilde = np.clip(y_tilde, -10 * clip_bound, 10 * clip_bound)
+
+    # 7) Call train_group with sample_weight (train_group will split weights internally)
+    tau_model, scaler_tau, tr_losses, val_losses, rollback = train_group(
+        X2.astype(np.float32),
+        y_tilde,
+        sample_weight=sample_weights,
+        verbose=verbose,
+        **train_kwargs
+    )
+
+    if verbose:
+        print(f"R learner (weighted pseudo-outcome): rollback epoch = {rollback}")
+        print(f"pi range: [{pi.min():.4f}, {pi.max():.4f}]")
+        print("w (Z-pi) stats: mean, std, min, 1%, 5%, 10%, 50%, 90%, 99%, max:",
+              np.mean(w), np.std(w),
+              np.min(w),
+              *np.percentile(w, [1,5,10,50,90,99,100]).tolist())
+        abs_y = np.abs(y_tilde).ravel()
+        print("y_tilde abs quantiles (50,90,95,99):", np.percentile(abs_y, [50,90,95,99]))
+        print("y_tilde mean/std:", np.mean(y_tilde), np.std(y_tilde))
+
+    return tau_model, scaler_tau, tr_losses, val_losses, rollback
 
 # define estimators
 def estimate_S(x_np):
