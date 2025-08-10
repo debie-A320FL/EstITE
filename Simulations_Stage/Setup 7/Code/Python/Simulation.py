@@ -61,19 +61,19 @@ hyperparams = hyperparams_df.iloc[0].to_dict()
 
 x_dim_list  = [25,50,100,300,500,1000]
 
-for x_dim in x_dim_list[2:3]:
+for x_dim in x_dim_list[0:1]:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Options
-    B = 250  # Num of simulations
+    B = 500  # Num of simulations
 
     size_sample_list = [int(1e5)]
     size_sample = size_sample_list[0]
 
-    sigma_single_list = [0.2, 0.3, 0.5, 1, 2, 3]
+    sigma_single_list = [0.2, 0.3, 0.5, 1, 2, 3,5,7,10]
 
-    for sigma in sigma_single_list[3:4]:
+    for sigma in sigma_single_list[7:]:
         print(f"sigma = {sigma}")
 
         pehe_records = []
@@ -167,18 +167,19 @@ for x_dim in x_dim_list[2:3]:
                     non_treated_frac=0.1
                 )
 
-                print("\nBeginning of the analysis")
-                save_prefix_plt = f"Figures/mixture_plot_{sim}_sigma_{sigma}_dim_{x_dim}_size_{size_sample}_scenario_{scen}_"
-                save_prefix_met = f"Metrics/mixture_metrics_{sim}_sigma_{sigma}_dim_{x_dim}_size_{size_sample}_scenario_{scen}_"
-                analyze_mixture(
-                    res_train_test,
-                    rho_list=rho_list,
-                    sigma_list=sigma_list,
-                    save_prefix_plt=save_prefix_plt,
-                    save_prefix_met=save_prefix_met,
-                    save=sim < 5
-                )
-                print("End of the analysis\n\n\n")
+                if sim < 5:
+                    print("\nBeginning of the analysis")
+                    save_prefix_plt = f"Figures/mixture_plot_{sim}_sigma_{sigma}_dim_{x_dim}_size_{size_sample}_scenario_{scen}_"
+                    save_prefix_met = f"Metrics/mixture_metrics_{sim}_sigma_{sigma}_dim_{x_dim}_size_{size_sample}_scenario_{scen}_"
+                    analyze_mixture(
+                        res_train_test,
+                        rho_list=rho_list,
+                        sigma_list=sigma_list,
+                        save_prefix_plt=save_prefix_plt,
+                        save_prefix_met=save_prefix_met,
+                        save=sim < 5
+                    )
+                    print("End of the analysis\n\n\n")
 
             X_train = res_train_test["x_train"]
             # print(X_train.head())
@@ -389,8 +390,7 @@ for x_dim in x_dim_list[2:3]:
         df_time = pd.DataFrame(time_records)
 
         # Save raw per-simulation results
-        df_pehe.to_csv(os.path.join(results_dir, f"B_{B}_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
-        df_time.to_csv(os.path.join(results_dir, f"B_{B}_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
+        df_pehe.to_csv(os.path.join(results_dir, f"pehe_B_{B}_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_sigma_{sigma}.csv"), index=False)
 
         # Compute Q1, median, Q3 summaries
         summary_pehe = df_pehe.drop(columns='sim').quantile([0.25, 0.5, 0.75]).T

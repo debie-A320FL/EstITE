@@ -58,16 +58,17 @@ data_train_test = pd.read_csv("./../Setup 1a/Data/simulated_1M_data.csv")
 hyperparams = hyperparams_df.iloc[0].to_dict()
 
 # treatment_percentile = 10
-for x_dim in [25]:
+for x_dim in [25, 50, 100, 300, 500, 1000][1:]:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Options
-    B = 5  # Num of simulations
+    B = 500  # Num of simulations
 
     size_sample_list = [int(1e5)]
+    size_sample = size_sample_list[0]
 
-    for size_sample in size_sample_list:
+    for scen in range(1,4):
         print(f"N = {size_sample}")
 
         pehe_records = []
@@ -98,7 +99,7 @@ for x_dim in [25]:
             #     
             # 
             #                                 binary=True)
-            scen = 4
+            # scen = 4
             if scen == 1:
                 res_train_test = prepare_train_data_scenario1(
                             size_sample = size_sample,
@@ -136,40 +137,6 @@ for x_dim in [25]:
                                 binary = False,
                                 non_treated_frac = 0.1  # e.g., 0.1 for forcing 10% untreated
                             )
-            elif scen == 4:
-                # 1. Specify your parameters
-                n_groups    = 3
-
-                sigma_list = [0.01, 0.01, 0.01]         # Marginal std dev for each of the 3 Gaussians
-                rho_list   = [0.9, 0.9, 0.9]         # AR(1) correlation for each group
-                ite_list   = [0.0, 2.0, -1.0]        # Constant ITE for each group
-                prop_list  = [0.5, 0.3, 0.2]         # 50% in group0, 30% in group1, 20% in group2
-
-                # 2. Generate the data
-                res_train_test = prepare_train_data_mixture1(
-                    size_sample=size_sample,
-                    x_dim=x_dim,
-                    n_groups=n_groups,
-                    sigma_list=sigma_list,
-                    rho_list=rho_list,
-                    ite_list=ite_list,
-                    prop_list=prop_list,
-                    seed=seed,
-                    train_ratio=0.7,
-                    noise_std=1.0,
-                    binary=True,
-                    non_treated_frac=0.1
-                )
-
-                print("\nBeginning of the analysis")
-                save_prefix = f"my_mixture_{sim}"
-                analyze_mixture(
-                    res_train_test,
-                    rho_list=rho_list,
-                    sigma_list=sigma_list,
-                    save_prefix=save_prefix
-                )
-                print("End of the analysis\n\n\n")
 
             X_train = res_train_test["x_train"]
             # print(X_train.head())
@@ -342,7 +309,7 @@ for x_dim in [25]:
             })
             # --- save learning curves ---
             if save_learning_curve and sim < 5:
-                fname = f'learning_curves_{sim}_STXM_x_dim_{x_dim}_size_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.pdf'
+                fname = f'Figures/learning_curves_{sim}_STXM_x_dim_{x_dim}_size_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.pdf'
                 with PdfPages(fname) as pdf:
                     for title, tr, val in [
                         ('S-learner', s_tr, s_val),
@@ -380,8 +347,7 @@ for x_dim in [25]:
         df_time = pd.DataFrame(time_records)
 
         # Save raw per-simulation results
-        df_pehe.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.csv"), index=False)
-        df_time.to_csv(os.path.join(results_dir, f"x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.csv"), index=False)
+        df_pehe.to_csv(os.path.join(results_dir, f"pehe_x_dim_{x_dim}_N_{size_sample}_scenario_{scen}_hidden_dim_{hidden_dim}.csv"), index=False)
 
         # Compute Q1, median, Q3 summaries
         summary_pehe = df_pehe.drop(columns='sim').quantile([0.25, 0.5, 0.75]).T

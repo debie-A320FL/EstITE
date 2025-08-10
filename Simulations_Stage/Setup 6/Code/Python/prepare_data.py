@@ -655,7 +655,8 @@ def analyze_mixture(
     data: dict,
     rho_list: list[float],
     sigma_list: list[float],
-    save_prefix: str = "mixture_analysis"
+    save_prefix: str = "mixture_analysis",
+    save_fig: bool = True
 ):
     """
     Analyze and visualize group separation from a mixture-data dict.
@@ -724,28 +725,29 @@ def analyze_mixture(
     print(f"Misclassification rate: {err:.3f}")
     print("Confusion matrix:\n", conf)
 
-    # 4) 2D random projection
-    P2 = np.linalg.qr(np.random.randn(d, 2))[0]
-    Y2 = X_test @ P2
-    plt.figure(figsize=(6,6))
-    plt.scatter(Y2[:,0], Y2[:,1], c=groups, s=1, alpha=0.5)
-    plt.title("2D Random Projection")
-    plt.xlabel("Comp 1"); plt.ylabel("Comp 2")
-    plt.tight_layout()
-    plt.savefig(f"{save_prefix}_2d.png", dpi=150)
-    plt.close()
+    if save_fig:
+        # 4) 2D random projection
+        P2 = np.linalg.qr(np.random.randn(d, 2))[0]
+        Y2 = X_test @ P2
+        plt.figure(figsize=(6,6))
+        plt.scatter(Y2[:,0], Y2[:,1], c=groups, s=1, alpha=0.5)
+        plt.title("2D Random Projection")
+        plt.xlabel("Comp 1"); plt.ylabel("Comp 2")
+        plt.tight_layout()
+        plt.savefig(f"{save_prefix}_2d.png", dpi=150)
+        plt.close()
 
-    # 5) 3D random projection
-    P3 = np.linalg.qr(np.random.randn(d, 3))[0]
-    Y3 = X_test @ P3
-    fig = plt.figure(figsize=(6,6))
-    ax  = fig.add_subplot(111, projection="3d")
-    ax.scatter(Y3[:,0], Y3[:,1], Y3[:,2], c=groups, s=1, alpha=0.5)
-    ax.set_title("3D Random Projection")
-    ax.set_xlabel("PC1"); ax.set_ylabel("PC2"); ax.set_zlabel("PC3")
-    plt.tight_layout()
-    plt.savefig(f"{save_prefix}_3d.png", dpi=150)
-    plt.close()
+        # 5) 3D random projection
+        P3 = np.linalg.qr(np.random.randn(d, 3))[0]
+        Y3 = X_test @ P3
+        fig = plt.figure(figsize=(6,6))
+        ax  = fig.add_subplot(111, projection="3d")
+        ax.scatter(Y3[:,0], Y3[:,1], Y3[:,2], c=groups, s=1, alpha=0.5)
+        ax.set_title("3D Random Projection")
+        ax.set_xlabel("PC1"); ax.set_ylabel("PC2"); ax.set_zlabel("PC3")
+        plt.tight_layout()
+        plt.savefig(f"{save_prefix}_3d.png", dpi=150)
+        plt.close()
 
 
 
