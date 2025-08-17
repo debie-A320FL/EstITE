@@ -27,6 +27,7 @@ def train_group(
     binary=False,
     verbose=False,
     sample_weight=None,   # NEW: array-like shape (n_samples,) or (n_samples,1)
+    output_range=None,   # NEW: None, "sigm", or "tanh"
 ):
     """
     Generic training + rollback patience, with optional GPU support.
@@ -40,6 +41,8 @@ def train_group(
         base_loss_fn = nn.BCEWithLogitsLoss(reduction='none')
     else:
         base_loss_fn = nn.MSELoss(reduction='none')
+
+    #print(f'base_loss_fn = {base_loss_fn}')
 
     # split + scale
     if sample_weight is None:
@@ -72,13 +75,26 @@ def train_group(
 
     # model → device
     input_dim = X_tr.shape[1]
-    model = nn.Sequential(
+    layers = [
         nn.Linear(input_dim, hidden_dim),
         nn.ReLU(),
         nn.Linear(hidden_dim, hidden_dim),
         nn.ReLU(),
         nn.Linear(hidden_dim, 1),
-    ).to(device)
+    ]
+
+    # attach final activation if requested
+    valid_ranges = [None, "sigm", "tanh"]
+    #print(f"output_range = {output_range}")
+    if output_range not in valid_ranges:
+        raise ValueError(f"Invalid output_range={output_range!r}. Must be one of {valid_ranges}.")
+
+    if output_range == "sigm":
+        layers.append(nn.Sigmoid())
+    elif output_range == "tanh":
+        layers.append(nn.Tanh())
+
+    model = nn.Sequential(*layers).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(
@@ -202,13 +218,18 @@ def train_multitask_group(
 
     # model → device
     input_dim = X_tr.shape[1]
-    model = nn.Sequential(
+    layers = [
         nn.Linear(input_dim, hidden_dim),
         nn.ReLU(),
         nn.Linear(hidden_dim, hidden_dim),
         nn.ReLU(),
         nn.Linear(hidden_dim, 2),   # two heads: control & treated
-    ).to(device)
+    ]
+
+    if binary:
+        layers.append(nn.Sigmoid())   # constrain outputs ∈ [0,1]
+
+    model = nn.Sequential(*layers).to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(
@@ -222,11 +243,6 @@ def train_multitask_group(
     recent_states = deque(maxlen=patience)
     rollback_epoch = None
 
-    #if binary:
-    #    print("Using binary loss")
-    #else:
-    #    print("Using continuous loss")
-
     for epoch in range(1, max_iter+1):
         # — TRAIN —
         model.train()
@@ -235,15 +251,7 @@ def train_multitask_group(
         target_tr = y_tr.repeat(1, 2)      # [N,2]
         mask_tr = torch.cat([1 - Z_tr, Z_tr], dim=1)  # select correct head
 
-        if binary:
-            # per-element BCE, then mask & average
-            loss_mat = F.binary_cross_entropy_with_logits(
-                out_tr, target_tr, reduction='none'
-            )
-            loss_tr = (loss_mat * mask_tr).sum(dim=1).mean()
-        else:
-            # masked MSE
-            loss_tr = ((out_tr - target_tr)**2 * mask_tr).sum(dim=1).mean()
+        loss_tr = ((out_tr - target_tr)**2 * mask_tr).sum(dim=1).mean()
 
         loss_tr.backward()
         optimizer.step()
@@ -258,13 +266,7 @@ def train_multitask_group(
             target_val = y_val.repeat(1, 2)
             mask_val = torch.cat([1 - Z_val, Z_val], dim=1)
 
-            if binary:
-                loss_mat = F.binary_cross_entropy_with_logits(
-                    out_val, target_val, reduction='none'
-                )
-                loss_val = (loss_mat * mask_val).sum(dim=1).mean().item()
-            else:
-                loss_val = ((out_val - target_val)**2 * mask_val).sum(dim=1).mean().item()
+            loss_val = ((out_val - target_val)**2 * mask_val).sum(dim=1).mean().item()
 
         val_losses.append(loss_val)
 
@@ -297,15 +299,20 @@ def train_multitask_group(
 
     return model, scaler, train_losses, val_losses, rollback_epoch
 
-def train_s_learner(X, Z, y, verbose = False,**train_kwargs):
+def train_s_learner(X, Z, y, verbose = False, binary=False,**train_kwargs):
     Xz = np.concatenate([X, Z], axis=1)
-    model, scaler, tr, val, roll = train_group(Xz, y, verbose=verbose,**train_kwargs)
+
+    if not binary:
+        model, scaler, tr, val, roll = train_group(Xz, y, verbose=verbose,**train_kwargs)
+    else:
+        model, scaler, tr, val, roll = train_group(Xz, y, verbose=verbose, output_range="sigm",**train_kwargs)
+
     if verbose:
         print(f"S-learner: parameters from epoch {roll}\n")
     return model, scaler, tr, val
 
 
-def train_t_learner(X, Z, y,verbose = False, **train_kwargs):
+def train_t_learner(X, Z, y,verbose = False,  binary=False,**train_kwargs):
     # 2) Sanity‐check
     Z = np.asarray(Z, dtype=np.float32).reshape(-1)   # (n,)
     #print(f"[T‑learner] Full data shapes → X: {X.shape}, Z: {Z.shape}, y: {y.shape}")
@@ -322,10 +329,16 @@ def train_t_learner(X, Z, y,verbose = False, **train_kwargs):
 
     #X0, y0 = X[Z[:,0]==0], y[Z[:,0]==0]
     #X1, y1 = X[Z[:,0]==1], y[Z[:,0]==1]
-    m0, s0, t0_tr, t0_val, r0 = train_group(X0, y0, verbose=verbose,**train_kwargs)
+
+    if not binary:
+        m0, s0, t0_tr, t0_val, r0 = train_group(X0, y0, verbose=verbose,**train_kwargs)
+        m1, s1, t1_tr, t1_val, r1 = train_group(X1, y1, verbose=verbose,**train_kwargs)
+    else:
+        m0, s0, t0_tr, t0_val, r0 = train_group(X0, y0, verbose=verbose,output_range="sigm",**train_kwargs)
+        m1, s1, t1_tr, t1_val, r1 = train_group(X1, y1, verbose=verbose,output_range="sigm",**train_kwargs)
+
     if verbose:
         print(f"T-learner (Z=0): parameters from epoch {r0}")
-    m1, s1, t1_tr, t1_val, r1 = train_group(X1, y1, verbose=verbose,**train_kwargs)
     if verbose:
         print(f"T-learner (Z=1): parameters from epoch {r1}\n")
     return m0, s0, t0_tr, t0_val, m1, s1, t1_tr, t1_val
@@ -338,6 +351,7 @@ def train_x_learner(
     compute_t: bool = True,
     t_models: tuple = None,
     verbose = False,
+    binary=False,
     **train_kwargs       # gathers hidden_dim, lr, max_iter, tol, patience, patience_lr, factor_lr, binary, etc.
 ):
     """
@@ -386,25 +400,40 @@ def train_x_learner(
 
     D1 = (y.ravel()[mask1] - mu0[mask1]).reshape(-1, 1)
     X1 = X[mask1]
+    
+    # 6) fit τ₀ and τ₁ via train_group
+    if not binary:
+        tau1_model, scaler_tau1, tr1, val1, rb1 = train_group(
+            X1, D1,
+            verbose=verbose,
+            **train_kwargs
+        )
 
-    # 6) fit τ₀ via train_group
-    tau0_model, scaler_tau0, tr0, val0, rb0 = train_group(
-        X0, D0,
-        verbose=verbose,
-        **train_kwargs
-    )
+        tau0_model, scaler_tau0, tr0, val0, rb0 = train_group(
+            X0, D0,
+            verbose=verbose,
+            **train_kwargs
+        )
+
+    else:
+        tau1_model, scaler_tau1, tr1, val1, rb1 = train_group(
+            X1, D1,
+            verbose=verbose,
+            output_range="tanh",
+            **train_kwargs
+        )
+        tau0_model, scaler_tau0, tr0, val0, rb0 = train_group(
+            X0, D0,
+            verbose=verbose,
+            output_range="tanh",
+            **train_kwargs
+        )
+
+    tau1_model = tau1_model.to(device)
     tau0_model = tau0_model.to(device)
+        
     if verbose:
         print(f"X-learner τ₀: parameters from epoch {rb0}")
-
-    # 7) fit τ₁ via train_group
-    tau1_model, scaler_tau1, tr1, val1, rb1 = train_group(
-        X1, D1,
-        verbose=verbose,
-        **train_kwargs
-    )
-    tau1_model = tau1_model.to(device)
-    if verbose:
         print(f"X-learner τ₁: parameters from epoch {rb1}")
 
     return (
@@ -415,13 +444,13 @@ def train_x_learner(
     )
 
 
-def train_m_learner(X, Z, y, verbose=False, **train_kwargs):
-    model, scaler, tr, val, r = train_multitask_group(X, Z, y, verbose=verbose, **train_kwargs)
+def train_m_learner(X, Z, y, verbose=False, binary=False,**train_kwargs):
+    model, scaler, tr, val, r = train_multitask_group(X, Z, y, verbose=verbose, binary=binary,**train_kwargs)
     if verbose:
         print(f"M-learner: parameters from epoch {r}\n")
     return model, scaler, tr, val
 
-def train_ra_learner(X, Z, y, verbose=False,**train_kwargs):
+def train_ra_learner(X, Z, y, binary=False,verbose=False,**train_kwargs):
     """
     RA Learner using neural networks for mu0 and mu1.
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
@@ -429,7 +458,7 @@ def train_ra_learner(X, Z, y, verbose=False,**train_kwargs):
     X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
 
     # Fit T-learner models
-    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X1, Z1, y1, **train_kwargs)
+    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X1, Z1, y1, binary=binary, **train_kwargs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     m0, m1 = m0.to(device), m1.to(device)
 
@@ -447,12 +476,16 @@ def train_ra_learner(X, Z, y, verbose=False,**train_kwargs):
     Y_tilde = Y_tilde.reshape(-1, 1)
 
     # Fit final tau model
-    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, verbose=verbose,**train_kwargs)
+    if not binary:
+        tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde,verbose=verbose,**train_kwargs)
+    else:
+        tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde,verbose=verbose,output_range="tanh",**train_kwargs)
+
     if verbose:
         print(f"RA learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
-def train_dr_learner(X, Z, y, verbose=False, **train_kwargs):
+def train_dr_learner(X, Z, y, verbose=False, binary=False,**train_kwargs):
     """
     DR Learner using neural networks and logistic regression.
     Returns: tau_model, scaler_tau, train_losses, val_losses, rollback_epoch
@@ -464,7 +497,7 @@ def train_dr_learner(X, Z, y, verbose=False, **train_kwargs):
     pi = prop_model.predict_proba(X2)[:, 1]
 
     # 2. Outcome models
-    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X1, Z1, y1, **train_kwargs)
+    m0, s0, _tr0, _val0, m1, s1, _tr1, _val1 = train_t_learner(X1, Z1, y1, binary=binary,**train_kwargs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     m0, m1 = m0.to(device), m1.to(device)
 
@@ -483,7 +516,10 @@ def train_dr_learner(X, Z, y, verbose=False, **train_kwargs):
     Y_tilde = (term1 + term2).reshape(-1, 1)
 
     # Final tau model
-    tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, verbose=verbose, **train_kwargs)
+    if not binary:
+        tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, verbose=verbose, **train_kwargs)
+    else:
+        tau_model, scaler_tau, tr, val, rollback = train_group(X2, Y_tilde, verbose=verbose,output_range="tanh", **train_kwargs)
     if verbose:
         print(f"DR learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
@@ -520,7 +556,7 @@ def train_r_learner2(X, Z, y, verbose=False, **train_kwargs):
         print(f"R learner: parameters from epoch {rollback}\n")
     return tau_model, scaler_tau, tr, val, rollback
 
-def train_r_learner(X, Z, y, verbose=False, min_w=1e-2, clip_pi=1e-3, **train_kwargs):
+def train_r_learner3(X, Z, y, verbose=False, min_w=1e-2, clip_pi=1e-3, **train_kwargs):
     """
     R Learner using stabilized pseudo-outcome + sample weights and reusing train_group.
     min_w: floor for |Z-pi| to avoid extreme y_tilde
@@ -575,16 +611,167 @@ def train_r_learner(X, Z, y, verbose=False, min_w=1e-2, clip_pi=1e-3, **train_kw
         **train_kwargs
     )
 
-    if verbose:
-        print(f"R learner (weighted pseudo-outcome): rollback epoch = {rollback}")
-        print(f"pi range: [{pi.min():.4f}, {pi.max():.4f}]")
-        print("w (Z-pi) stats: mean, std, min, 1%, 5%, 10%, 50%, 90%, 99%, max:",
-              np.mean(w), np.std(w),
-              np.min(w),
-              *np.percentile(w, [1,5,10,50,90,99,100]).tolist())
-        abs_y = np.abs(y_tilde).ravel()
-        print("y_tilde abs quantiles (50,90,95,99):", np.percentile(abs_y, [50,90,95,99]))
-        print("y_tilde mean/std:", np.mean(y_tilde), np.std(y_tilde))
+    return tau_model, scaler_tau, tr_losses, val_losses, rollback
+
+def train_group_rloss(
+    X, y,
+    r_m, r_pi, r_z,
+    hidden_dim=64,
+    lr=0.001,
+    max_iter=1000,
+    tol=1e-3,
+    patience=10,
+    patience_lr=20,
+    factor_lr=0.25,
+    verbose=False,
+):
+    """
+    Entraîne un réseau (architecture simple) en minimisant directement la R-loss :
+        loss = mean( ((y - r_m) - (r_z - r_pi) * model(X))^2 )
+    - Aucun poids, aucune pseudo-réponse divisée.
+    - X, y, r_m, r_pi, r_z doivent être alignés (mêmes longueurs).
+    Retour : model, scaler, train_losses, val_losses, rollback_epoch
+    """
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # sanity checks
+    X_arr = np.asarray(X)
+    y_arr = np.asarray(y).reshape(-1)
+    r_m_arr = np.asarray(r_m).reshape(-1)
+    r_pi_arr = np.asarray(r_pi).reshape(-1)
+    r_z_arr = np.asarray(r_z).reshape(-1)
+
+    n = X_arr.shape[0]
+    if not (len(y_arr) == len(r_m_arr) == len(r_pi_arr) == len(r_z_arr) == n):
+        raise ValueError("X, y, r_m, r_pi et r_z doivent avoir la même longueur.")
+
+    # split (train/val) — on split tout ensemble pour garder l'alignement
+    X_tr_np, X_val_np, y_tr_np, y_val_np, r_m_tr_np, r_m_val_np, r_pi_tr_np, r_pi_val_np, r_z_tr_np, r_z_val_np = train_test_split(
+        X_arr, y_arr, r_m_arr, r_pi_arr, r_z_arr, test_size=0.2, random_state=42
+    )
+
+    # scale X
+    scaler = StandardScaler()
+    X_tr_np = scaler.fit_transform(X_tr_np.astype(np.float32))
+    X_val_np = scaler.transform(X_val_np.astype(np.float32))
+
+    # to tensors
+    X_tr = torch.from_numpy(X_tr_np).to(device)
+    X_val = torch.from_numpy(X_val_np).to(device)
+    y_tr = torch.from_numpy(y_tr_np.astype(np.float32)).to(device).view(-1, 1)
+    y_val = torch.from_numpy(y_val_np.astype(np.float32)).to(device).view(-1, 1)
+
+    r_m_tr_t = torch.from_numpy(r_m_tr_np.astype(np.float32)).to(device).view(-1, 1)
+    r_m_val_t = torch.from_numpy(r_m_val_np.astype(np.float32)).to(device).view(-1, 1)
+    r_pi_tr_t = torch.from_numpy(r_pi_tr_np.astype(np.float32)).to(device).view(-1, 1)
+    r_pi_val_t = torch.from_numpy(r_pi_val_np.astype(np.float32)).to(device).view(-1, 1)
+    r_z_tr_t = torch.from_numpy(r_z_tr_np.astype(np.float32)).to(device).view(-1, 1)
+    r_z_val_t = torch.from_numpy(r_z_val_np.astype(np.float32)).to(device).view(-1, 1)
+
+    # model
+    input_dim = X_tr.shape[1]
+    model = nn.Sequential(
+        nn.Linear(input_dim, hidden_dim),
+        nn.ReLU(),
+        nn.Linear(hidden_dim, hidden_dim),
+        nn.ReLU(),
+        nn.Linear(hidden_dim, 1),
+    ).to(device)
+
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=factor_lr,
+                                  patience=patience_lr, cooldown=2*patience_lr)
+
+    prev_lr = optimizer.param_groups[0]['lr']
+    train_losses, val_losses = [], []
+    best_val, no_imp = float('inf'), 0
+    recent_states = deque(maxlen=patience)
+    rollback_epoch = None
+
+    for epoch in range(1, max_iter + 1):
+        # training step
+        model.train()
+        optimizer.zero_grad()
+        preds_tr = model(X_tr)                              # (N,1)
+        residual_tr = (y_tr - r_m_tr_t) - (r_z_tr_t - r_pi_tr_t) * preds_tr
+        loss_tr = residual_tr.pow(2).mean()
+        loss_tr.backward()
+        optimizer.step()
+
+        train_losses.append(loss_tr.item())
+        recent_states.append(copy.deepcopy(model.state_dict()))
+
+        # validation
+        model.eval()
+        with torch.no_grad():
+            preds_val = model(X_val)
+            residual_val = (y_val - r_m_val_t) - (r_z_val_t - r_pi_val_t) * preds_val
+            loss_val = residual_val.pow(2).mean().item()
+        val_losses.append(loss_val)
+
+        # LR scheduler
+        scheduler.step(loss_val)
+        curr_lr = optimizer.param_groups[0]['lr']
+        if curr_lr != prev_lr:
+            if verbose:
+                print(f"[Epoch {epoch}] LR changed: {prev_lr:.3e} → {curr_lr:.3e}")
+            prev_lr = curr_lr
+
+        # early-stop / rollback
+        rel_imp = (best_val - loss_val)/best_val if best_val < float('inf') else float('inf')
+        if rel_imp >= tol:
+            best_val, no_imp = loss_val, 0
+        else:
+            no_imp += 1
+
+        if no_imp >= patience:
+            rollback_epoch = epoch - patience
+            # rollback to earliest saved state in deque
+            model.load_state_dict(recent_states[0])
+            if verbose:
+                print(f"Stopping at epoch {epoch} — rolling back to epoch {rollback_epoch}.")
+            break
+
+        if epoch == max_iter:
+            rollback_epoch = max_iter
+            if verbose:
+                print(f"Reached max_iter={max_iter}, using epoch {rollback_epoch}.")
+
+    return model, scaler, train_losses, val_losses, rollback_epoch
+
+
+# Exemple d'utilisation : version de train_r_learner qui appelle train_group_rloss
+def train_r_learner(X, Z, y, verbose=False, clip_pi=1e-3, **train_kwargs):
+    """
+    R-learner minimal : estime m et pi sur une première moitié, puis entraîne tau
+    sur la seconde moitié en minimisant la R-loss via train_group_rloss (sans poids).
+    """
+    #print("new r learner!!")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # split pour nuisance / tau
+    X1, X2, Z1, Z2, y1, y2 = train_test_split(X, Z, y, test_size=0.5, random_state=42)
+
+    # mu on X1
+    m_model, m_scaler, _, _, _ = train_group(X1, y1, verbose=verbose, **train_kwargs)
+    m_model = m_model.to(device)
+    X2_scaled_for_m = m_scaler.transform(X2.astype(np.float32))
+    with torch.no_grad():
+        m_model.eval()
+        X2_t = torch.from_numpy(X2_scaled_for_m).to(device)
+        m_hat = m_model(X2_t).detach().cpu().numpy().reshape(-1)
+
+    # propensity on X1 -> predict on X2
+    prop_model = LogisticRegression().fit(X1, Z1.ravel())
+    pi = prop_model.predict_proba(X2)[:, 1]
+    pi = np.clip(pi, clip_pi, 1.0 - clip_pi)
+
+    # appel direct de train_group_rloss (sans poids)
+    tau_model, scaler_tau, tr_losses, val_losses, rollback = train_group_rloss(
+        X2, y2, r_m=m_hat, r_pi=pi.ravel(), r_z=Z2.ravel(),
+        verbose=verbose,
+        **train_kwargs
+    )
 
     return tau_model, scaler_tau, tr_losses, val_losses, rollback
 

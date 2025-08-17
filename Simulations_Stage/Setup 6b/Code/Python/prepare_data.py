@@ -386,6 +386,7 @@ def prepare_train_data_scenario2(
     if binary:
         pY = 1 / (1 + np.exp(-Y_cont))
         Y = np.random.binomial(1, pY)
+        tau = 1 / (1 + np.exp(-Y1)) - 1 / (1 + np.exp(-Y0))
     else:
         Y = Y_cont
 
@@ -481,6 +482,7 @@ def prepare_train_data_scenario3(
     if binary:
         pY = 1 / (1 + np.exp(-Y_cont))
         Y = np.random.binomial(1, pY)
+        tau = 1 / (1 + np.exp(-Y1)) - 1 / (1 + np.exp(-Y0))
     else:
         Y = Y_cont
 
