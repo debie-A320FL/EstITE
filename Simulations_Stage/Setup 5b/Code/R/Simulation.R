@@ -242,7 +242,7 @@ for (treatment_percentile in list_treatment_percentile) {
     
     rm(out_T)
 
-    # #################### X-RF
+    # #################### X-LASSO
 
     start_time <- Sys.time()
 
